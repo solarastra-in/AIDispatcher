@@ -1,0 +1,6 @@
+{
+  "name": "WhyOr Dispatch - AI Routing & Token Optimization Engine",
+  "description": "Intelligent multi-model AI routing infrastructure, token efficiency optimizer, cryptographic context ledger, and multi-tenant persona management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
