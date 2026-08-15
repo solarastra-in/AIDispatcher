@@ -52,9 +52,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     },
     { 
       id: 'admin', 
-      label: 'Platform & Billing', 
+      label: 'Admin Console', 
       icon: ShieldCheck,
-      badge: activePersona.canManagePlatform ? 'Super' : undefined
+      badge: 'SMTP & Auth'
     },
     { id: 'research', label: 'Market Architecture', icon: BookOpen },
   ];

@@ -6,6 +6,7 @@ import { ContextLedgerView } from './components/ContextLedgerView';
 import { ModelCatalog } from './components/ModelCatalog';
 import { TeamGovernance } from './components/TeamGovernance';
 import { AdminBilling } from './components/AdminBilling';
+import { AdminConsole } from './components/AdminConsole';
 import { MarketResearchView } from './components/MarketResearchView';
 import { SavingsAnalyticsDashboard } from './components/SavingsAnalyticsDashboard';
 import { CompanyCredentialsPage } from './components/CompanyCredentialsPage';
@@ -14,6 +15,12 @@ import { QualityModelInspector } from './components/QualityModelInspector';
 import { AIModel, UserPersona, ContextLedgerEntry } from './types';
 import { INITIAL_AI_MODELS, PERSONA_PROFILES } from './data/mockData';
 import { apiService } from './core/apiSurface';
+import { 
+  saveLedgerEntryToFirestore, 
+  loadLedgerFromFirestore, 
+  saveContextSessionToFirestore,
+  recordAuditLogToFirestore
+} from './lib/firebase';
 import { Globe, ArrowRight, ShieldCheck, Sparkles, Zap, Layers, Code2, Activity } from 'lucide-react';
 
 export default function App() {
@@ -26,6 +33,9 @@ export default function App() {
   const [isApiExplorerOpen, setIsApiExplorerOpen] = useState<boolean>(false);
   const [isQualityInspectorOpen, setIsQualityInspectorOpen] = useState<boolean>(false);
   
+  // Context Persistence Policy (Firestore Cloud by default vs Local Transient)
+  const [persistenceMode, setPersistenceMode] = useState<'firestore_cloud' | 'local_transient'>('firestore_cloud');
+
   // Initial context ledger entries for demonstration
   const [ledger, setLedger] = useState<ContextLedgerEntry[]>([
     {
@@ -82,6 +92,17 @@ export default function App() {
     },
   ]);
 
+  // Hydrate ledger from Firestore if available
+  useEffect(() => {
+    loadLedgerFromFirestore(30)
+      .then((cloudEntries) => {
+        if (cloudEntries && cloudEntries.length > 0) {
+          setLedger(cloudEntries);
+        }
+      })
+      .catch((err) => console.log('Loaded initial demo ledger state'));
+  }, []);
+
   // Load models from server if available
   useEffect(() => {
     fetch('/api/models')
@@ -96,6 +117,24 @@ export default function App() {
 
   const handleNewLedgerEntry = (entry: ContextLedgerEntry) => {
     setLedger((prev) => [entry, ...prev]);
+
+    // If Firestore Cloud persistence is active, persist directly to Firestore
+    if (persistenceMode === 'firestore_cloud') {
+      saveLedgerEntryToFirestore(entry).catch((err) =>
+        console.warn('Firestore ledger save notice:', err.message)
+      );
+
+      saveContextSessionToFirestore(entry.sessionId, {
+        sessionId: entry.sessionId,
+        promptSnippet: entry.promptSnippet,
+        routedModelId: entry.routedModelId,
+        routedModelName: entry.routedModelName,
+        entitiesExtracted: entry.entitiesExtracted,
+        decisionsMade: entry.decisionsMade,
+        tokensSaved: entry.tokensSaved,
+        updatedAt: new Date().toISOString(),
+      }).catch((err) => console.warn('Firestore context save notice:', err.message));
+    }
   };
 
   const handleAddModel = (newModel: AIModel) => {
@@ -225,6 +264,8 @@ export default function App() {
             ledger={ledger}
             activePersona={activePersona}
             onNavigateTab={setCurrentTab}
+            persistenceMode={persistenceMode}
+            onTogglePersistenceMode={setPersistenceMode}
           />
         )}
 
@@ -250,9 +291,10 @@ export default function App() {
         )}
 
         {currentTab === 'admin' && (
-          <AdminBilling
-            activePersona={activePersona}
+          <AdminConsole
             onNavigateTab={setCurrentTab}
+            persistenceMode={persistenceMode}
+            onTogglePersistenceMode={setPersistenceMode}
           />
         )}
 

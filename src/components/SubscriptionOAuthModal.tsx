@@ -14,6 +14,7 @@ import {
   Info
 } from 'lucide-react';
 import { AIProvider } from '../types';
+import { signInWithGoogle, saveCredentialToFirestore, recordAuditLogToFirestore } from '../lib/firebase';
 
 interface SubscriptionOAuthModalProps {
   isOpen: boolean;
@@ -50,21 +51,58 @@ export const SubscriptionOAuthModal: React.FC<SubscriptionOAuthModalProps> = ({
     setIsLoading(true);
     setAuthError(null);
 
+    let activeEmail = emailInput.trim() || 'solarastra.in@gmail.com';
+    let tokenToPass = sessionTokenInput.trim();
+
     try {
+      // If Google OAuth, trigger real Google Auth popup with Firebase
+      if (oauthType === 'google') {
+        try {
+          const authResult = await signInWithGoogle();
+          if (authResult.user.email) {
+            activeEmail = authResult.user.email;
+            setEmailInput(activeEmail);
+          }
+          tokenToPass = `gsi_${authResult.idToken.slice(0, 16)}...`;
+        } catch (gErr: any) {
+          // If user closes popup or cancels, fallback gracefully to existing active email
+          console.warn('Google popup notice:', gErr.message);
+        }
+      }
+
       const res = await fetch('/api/credentials/subscription/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
-          email: emailInput.trim(),
+          email: activeEmail,
           oauthType,
           subscriptionTier: selectedTier,
-          sessionToken: sessionTokenInput.trim(),
+          sessionToken: tokenToPass,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
+        // Persist to Firestore
+        await saveCredentialToFirestore(provider, {
+          provider,
+          providerDisplayName,
+          authMethod: oauthType === 'cli' ? 'cli_daemon' : 'subscription_oauth',
+          hasSubscription: true,
+          subscriptionTier: selectedTier,
+          subscriptionEmail: activeEmail,
+          status: 'connected',
+          monthlyFlatRateCostUsd: provider === 'openai' ? 200 : 20,
+        });
+
+        await recordAuditLogToFirestore(
+          `Bound ${providerDisplayName} Subscription`,
+          'credentials',
+          activeEmail,
+          `Connected ${selectedTier} via ${oauthType.toUpperCase()} OAuth`
+        );
+
         onSuccess();
         onClose();
       } else {

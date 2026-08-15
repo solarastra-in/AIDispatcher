@@ -27,12 +27,16 @@ interface ContextLedgerViewProps {
   ledger: ContextLedgerEntry[];
   activePersona: UserPersona;
   onNavigateTab?: (tab: string) => void;
+  persistenceMode?: 'firestore_cloud' | 'local_transient';
+  onTogglePersistenceMode?: (mode: 'firestore_cloud' | 'local_transient') => void;
 }
 
 export const ContextLedgerView: React.FC<ContextLedgerViewProps> = ({
   ledger,
   activePersona,
   onNavigateTab,
+  persistenceMode = 'firestore_cloud',
+  onTogglePersistenceMode,
 }) => {
   const [selectedEntry, setSelectedEntry] = useState<ContextLedgerEntry | null>(ledger[0] || null);
   const [copiedRaw, setCopiedRaw] = useState<boolean>(false);
@@ -203,6 +207,34 @@ export const ContextLedgerView: React.FC<ContextLedgerViewProps> = ({
               </button>
             )}
           </div>
+        </div>
+
+        {/* Persistence Status & Toggle Bar */}
+        <div className="mt-4 pt-4 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">Context Persistence Mode:</span>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-mono text-[11px] font-semibold border ${
+              persistenceMode === 'firestore_cloud'
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/30'
+                : 'bg-amber-500/10 text-amber-300 border-amber-400/30'
+            }`}>
+              <Database className="w-3 h-3 text-emerald-400" />
+              {persistenceMode === 'firestore_cloud' ? 'Firestore Cloud Persistence (Live Active)' : 'Local Scratchpad Only (Transient)'}
+            </span>
+          </div>
+
+          {onTogglePersistenceMode && (
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 text-[11px]">Toggle Target:</span>
+              <button
+                type="button"
+                onClick={() => onTogglePersistenceMode(persistenceMode === 'firestore_cloud' ? 'local_transient' : 'firestore_cloud')}
+                className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-[11px] text-white font-mono cursor-pointer transition-all hover:border-cyan-400/50"
+              >
+                Switch to {persistenceMode === 'firestore_cloud' ? 'Local Transient' : 'Firestore Cloud'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Verification Success Toast */}

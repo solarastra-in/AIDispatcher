@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "UserProfile": {
+      "collection": "users",
+      "fields": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "Display name" },
+        "photoURL": { "type": "string", "description": "Avatar photo URL" },
+        "role": { "type": "string", "description": "User role: superadmin, admin, developer, auditor" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "lastLoginAt": { "type": "string", "description": "Last login timestamp" }
+      }
+    },
+    "CompanyCredential": {
+      "collection": "credentials",
+      "fields": {
+        "provider": { "type": "string", "description": "AI provider ID (google, openai, anthropic, etc.)" },
+        "providerDisplayName": { "type": "string", "description": "Display name" },
+        "authMethod": { "type": "string", "description": "api_key or subscription_oauth or cli_daemon" },
+        "hasKey": { "type": "boolean", "description": "Whether API key is configured" },
+        "hasSubscription": { "type": "boolean", "description": "Whether subscription is active" },
+        "subscriptionTier": { "type": "string", "description": "Subscription tier" },
+        "subscriptionEmail": { "type": "string", "description": "Bound email account" },
+        "monthlyFlatRateCostUsd": { "type": "number", "description": "Flat monthly cost" },
+        "monthlySpendLimitUsd": { "type": "number", "description": "Budget limit" },
+        "baseUrl": { "type": "string", "description": "Custom endpoint base URL" },
+        "organizationId": { "type": "string", "description": "Organization ID" },
+        "status": { "type": "string", "description": "connected, unconfigured, error" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
+      }
+    },
+    "SmtpSettings": {
+      "collection": "smtp_settings",
+      "fields": {
+        "id": { "type": "string", "description": "Settings record ID" },
+        "host": { "type": "string", "description": "SMTP host address (e.g. smtp.gmail.com, smtp.sendgrid.net)" },
+        "port": { "type": "number", "description": "SMTP port (587, 465, 25)" },
+        "secure": { "type": "boolean", "description": "Whether to use SSL/TLS directly (port 465)" },
+        "requireTls": { "type": "boolean", "description": "Whether STARTTLS is required" },
+        "user": { "type": "string", "description": "SMTP username or account email" },
+        "passMasked": { "type": "string", "description": "Masked representation of password / app password" },
+        "fromEmail": { "type": "string", "description": "Default Sender Email" },
+        "fromName": { "type": "string", "description": "Sender Display Name (e.g. WhyOr Dispatch AI)" },
+        "replyTo": { "type": "string", "description": "Reply-To address" },
+        "isVerified": { "type": "boolean", "description": "Whether SMTP handshake is verified" },
+        "lastVerifiedAt": { "type": "string", "description": "Last verification timestamp" },
+        "updatedAt": { "type": "string", "description": "Last configuration update" }
+      }
+    },
+    "EmailLog": {
+      "collection": "email_logs",
+      "fields": {
+        "id": { "type": "string", "description": "Unique email log ID" },
+        "to": { "type": "string", "description": "Recipient email" },
+        "from": { "type": "string", "description": "Sender email" },
+        "subject": { "type": "string", "description": "Email subject" },
+        "emailType": { "type": "string", "description": "test_verification, quota_alert, audit_report, dispatch_alert" },
+        "status": { "type": "string", "description": "sent, failed, queued" },
+        "messageId": { "type": "string", "description": "SMTP server message ID" },
+        "errorMessage": { "type": "string", "description": "Error details if failed" },
+        "sentAt": { "type": "string", "description": "Timestamp" },
+        "sentBy": { "type": "string", "description": "User who triggered email" }
+      }
+    },
+    "DispatchLedgerEntry": {
+      "collection": "dispatch_ledger",
+      "fields": {
+        "id": { "type": "string", "description": "Dispatch record ID" },
+        "taskId": { "type": "string", "description": "Unique task identifier" },
+        "prompt": { "type": "string", "description": "Dispatched prompt" },
+        "modelChosen": { "type": "string", "description": "Selected model" },
+        "provider": { "type": "string", "description": "Selected provider" },
+        "routingStrategy": { "type": "string", "description": "Strategy applied" },
+        "dispatchedVia": { "type": "string", "description": "company_subscription_gateway or direct_company_byok" },
+        "costUsd": { "type": "number", "description": "Actual cost billed" },
+        "tokensSavedUsd": { "type": "number", "description": "Estimated cost avoided" },
+        "latencyMs": { "type": "number", "description": "Execution latency" },
+        "status": { "type": "string", "description": "success, failover, error" },
+        "timestamp": { "type": "string", "description": "Execution timestamp" }
+      }
+    },
+    "ContextSession": {
+      "collection": "context_sessions",
+      "fields": {
+        "id": { "type": "string", "description": "Session ID" },
+        "title": { "type": "string", "description": "Session title" },
+        "persistenceMode": { "type": "string", "description": "firestore_cloud or local_transient" },
+        "totalTokens": { "type": "number", "description": "Active token count" },
+        "hashChain": { "type": "string", "description": "Cryptographic ledger hash" },
+        "blocks": { "type": "array", "description": "Context AST & prompt blocks" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      }
+    },
+    "AuditLog": {
+      "collection": "audit_logs",
+      "fields": {
+        "id": { "type": "string", "description": "Audit ID" },
+        "action": { "type": "string", "description": "Action performed" },
+        "category": { "type": "string", "description": "security, credentials, smtp, dispatch" },
+        "actor": { "type": "string", "description": "User email or system" },
+        "details": { "type": "string", "description": "Summary of change" },
+        "timestamp": { "type": "string", "description": "Event timestamp" }
+      }
+    }
+  }
+}
