@@ -245,12 +245,32 @@ export interface MarketComparisonItem {
   whyOrAdvantage: string;
 }
 
+export type AuthMethodType = 'api_key' | 'subscription_oauth' | 'subscription_email' | 'cli_daemon' | 'unified_gateway';
+
 export interface CompanyProviderCredential {
   provider: AIProvider;
   providerDisplayName: string;
+  authMethod?: AuthMethodType;
   apiKey: string;
   maskedKey: string;
   hasKey?: boolean;
+  
+  // Subscription & OAuth fields
+  subscriptionTier?: string;
+  subscriptionEmail?: string;
+  oauthProvider?: 'google' | 'github' | 'email_magic' | 'direct_session';
+  oauthConnectedAt?: string;
+  sessionTokenMasked?: string;
+  hasSubscription?: boolean;
+  monthlyFlatRateCostUsd?: number;
+  
+  // Local Proxy & CLI Bridge fields
+  proxyStatus?: 'running' | 'idle' | 'stopped' | 'error';
+  localProxyPort?: number;
+  localProxyUrl?: string;
+  cliBridgeStatus?: 'active' | 'ready' | 'stopped';
+  cliCommand?: string;
+  
   baseUrl?: string;
   organizationId?: string;
   projectId?: string;
@@ -263,12 +283,43 @@ export interface CompanyProviderCredential {
   notes?: string;
 }
 
+export interface UnifiedSubscriptionGatewayConfig {
+  status: 'active' | 'standby' | 'stopped';
+  gatewayPort: number;
+  gatewayBindUrl: string;
+  activeSubscriptions: {
+    provider: AIProvider;
+    name: string;
+    tier: string;
+    authMethod: AuthMethodType;
+    accountEmail: string;
+  }[];
+  totalRoutedRequests: number;
+  totalTokensProcessed: number;
+  flatMonthlySpendUsd: number;
+  estimatedApiCostAvoidedUsd: number;
+  lastHeartbeat: string;
+}
+
+export interface TerminalSessionCommandResult {
+  command: string;
+  stdout: string;
+  stderr?: string;
+  exitCode: number;
+  durationMs: number;
+  sessionTier: string;
+  timestamp: string;
+}
+
 export interface CompanyOnboardingProfile {
   companyName: string;
   orgId: string;
   primaryContactEmail: string;
-  byokMode: 'direct_keys_only' | 'hybrid_fallback' | 'platform_pool';
+  byokMode: 'direct_keys_only' | 'hybrid_fallback' | 'platform_pool' | 'subscription_priority';
+  preferredAuthMode?: 'subscription_first' | 'api_key_first';
+  gatewayConfig?: UnifiedSubscriptionGatewayConfig;
   credentials: Record<string, CompanyProviderCredential>;
   lastUpdated: string;
 }
+
 

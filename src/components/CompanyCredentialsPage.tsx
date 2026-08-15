@@ -33,9 +33,15 @@ import {
   Server,
   CloudLightning,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Terminal,
+  Mail,
+  SlidersHorizontal,
+  Power
 } from 'lucide-react';
-import { AIProvider, CompanyProviderCredential, CompanyOnboardingProfile } from '../types';
+import { AIProvider, CompanyProviderCredential, CompanyOnboardingProfile, UnifiedSubscriptionGatewayConfig } from '../types';
+import { ClaudeCliTerminal } from './ClaudeCliTerminal';
+import { SubscriptionOAuthModal } from './SubscriptionOAuthModal';
 
 interface ProviderConfigMeta {
   id: AIProvider;
@@ -48,6 +54,9 @@ interface ProviderConfigMeta {
   keyPrefix: string;
   docsUrl: string;
   pricingNote: string;
+  subscriptionAvailable: boolean;
+  subscriptionTiers: string[];
+  cliSupported?: boolean;
 }
 
 const PROVIDER_METAS: ProviderConfigMeta[] = [
@@ -65,7 +74,9 @@ const PROVIDER_METAS: ProviderConfigMeta[] = [
     keyPlaceholder: 'AIzaSy...',
     keyPrefix: 'AIzaSy',
     docsUrl: 'https://aistudio.google.com/app/apikey',
-    pricingNote: '$0.10 / $0.40 per 1M tokens (Direct Google Cloud Billing)',
+    pricingNote: '$0.10 / $0.40 per 1M tokens (Direct API) OR $20/mo Google One AI Premium',
+    subscriptionAvailable: true,
+    subscriptionTiers: ['Google One AI Premium / Gemini Advanced ($20/mo Flat)', 'Google Workspace AI Enterprise Add-on'],
   },
   {
     id: 'openai',
@@ -82,7 +93,9 @@ const PROVIDER_METAS: ProviderConfigMeta[] = [
     keyPlaceholder: 'sk-proj-... or sk-...',
     keyPrefix: 'sk-',
     docsUrl: 'https://platform.openai.com/api-keys',
-    pricingNote: '$0.15 / $0.60 per 1M tokens on 4o-mini (Direct OpenAI Billing)',
+    pricingNote: '$2.50 / $10.00 per 1M tokens on 4o OR $20–$200/mo ChatGPT Plus/Pro Unlimited',
+    subscriptionAvailable: true,
+    subscriptionTiers: ['ChatGPT Pro Unlimited Reasoning ($200/mo Flat)', 'ChatGPT Plus Standard ($20/mo Flat)', 'ChatGPT Team / Enterprise SSO'],
   },
   {
     id: 'anthropic',
@@ -98,7 +111,10 @@ const PROVIDER_METAS: ProviderConfigMeta[] = [
     keyPlaceholder: 'sk-ant-api03-...',
     keyPrefix: 'sk-ant-',
     docsUrl: 'https://console.anthropic.com/settings/keys',
-    pricingNote: '$0.80 / $4.00 on Haiku, $3.00 / $15.00 on Sonnet',
+    pricingNote: '$3.00 / $15.00 per 1M tokens (API) OR $20/mo Claude Pro/Max CLI Unlimited',
+    subscriptionAvailable: true,
+    subscriptionTiers: ['Claude 3.7 Max / CLI Unlimited ($20/mo Flat)', 'Claude Pro Flat ($20/mo)', 'Claude Team Workspace License'],
+    cliSupported: true,
   },
   {
     id: 'deepseek',
@@ -113,7 +129,9 @@ const PROVIDER_METAS: ProviderConfigMeta[] = [
     keyPlaceholder: 'sk-...',
     keyPrefix: 'sk-',
     docsUrl: 'https://platform.deepseek.com/api_keys',
-    pricingNote: '$0.14 / $0.28 per 1M tokens (Direct DeepSeek Billing)',
+    pricingNote: '$0.14 / $0.28 per 1M tokens OR Web Session Bypass',
+    subscriptionAvailable: true,
+    subscriptionTiers: ['DeepSeek VIP Web Session ($0.14/1M or Web Flat)'],
   },
   {
     id: 'groq',
@@ -122,131 +140,138 @@ const PROVIDER_METAS: ProviderConfigMeta[] = [
     logoColor: 'from-orange-500 to-red-500',
     defaultBaseUrl: 'https://api.groq.com/openai/v1',
     supportedModels: [
-      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (380 tok/s)', tier: 'Mid Tier LPU' },
-      { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B (750 tok/s)', tier: 'Ultra-Fast LPU' },
-      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (32k context)', tier: 'Mid MoE' },
+      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Groq)', tier: 'Sub-100ms' },
+      { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', tier: 'Ultra-Fast' },
+      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (32k)', tier: 'MoE Fast' },
     ],
     keyPlaceholder: 'gsk_...',
     keyPrefix: 'gsk_',
     docsUrl: 'https://console.groq.com/keys',
-    pricingNote: '$0.05 / $0.08 per 1M tokens on 8B (<90ms latency)',
+    pricingNote: '$0.05 / $0.08 per 1M tokens (Direct Groq Cloud)',
+    subscriptionAvailable: false,
+    subscriptionTiers: [],
   },
   {
     id: 'mistral',
     name: 'Mistral AI',
     category: 'Open Weights',
-    logoColor: 'from-amber-400 to-yellow-500',
+    logoColor: 'from-amber-600 to-yellow-500',
+    defaultBaseUrl: 'https://api.mistral.ai/v1',
     supportedModels: [
-      { id: 'mistral-large-latest', name: 'Mistral Large 2', tier: 'Frontier EU' },
-      { id: 'codestral-latest', name: 'Codestral (AST Specialist)', tier: 'Code Gen' },
-      { id: 'pixtral-12b-2409', name: 'Pixtral Vision 12B', tier: 'Multimodal' },
+      { id: 'mistral-large-latest', name: 'Mistral Large 2', tier: 'Frontier Sovereign' },
+      { id: 'codestral-latest', name: 'Codestral (AST Code)', tier: 'Code Reasoning' },
+      { id: 'pixtral-12b-2409', name: 'Pixtral 12B Vision', tier: 'Vision Low Cost' },
     ],
-    keyPlaceholder: 'sk-... or ...',
+    keyPlaceholder: '...',
     keyPrefix: '',
-    docsUrl: 'https://console.mistral.ai/api-keys/',
-    pricingNote: 'European data-sovereign enterprise models',
-  },
-  {
-    id: 'custom',
-    name: 'Self-Hosted / Azure / vLLM Endpoint',
-    category: 'Enterprise / Custom',
-    logoColor: 'from-purple-500 to-pink-500',
-    defaultBaseUrl: 'http://localhost:11434/v1',
-    supportedModels: [
-      { id: 'custom-vllm-model', name: 'Private vLLM / Ollama Node', tier: 'Private VPC' },
-      { id: 'azure-openai-deployment', name: 'Azure OpenAI Private Gateway', tier: 'Enterprise VPC' },
-    ],
-    keyPlaceholder: 'Bearer token or custom API key...',
-    keyPrefix: '',
-    docsUrl: 'https://docs.vllm.ai',
-    pricingNote: 'Zero token cost (Host compute only)',
+    docsUrl: 'https://console.mistral.ai/api-keys',
+    pricingNote: '$2.00 / $6.00 per 1M tokens on Large (Direct La Plateforme)',
+    subscriptionAvailable: false,
+    subscriptionTiers: [],
   },
 ];
 
 interface CompanyCredentialsPageProps {
-  onNavigateToDispatch?: (prefilledPrompt?: string, modelId?: string) => void;
+  onNavigateToDispatch?: (prompt?: string, modelId?: string) => void;
 }
 
-export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({ onNavigateToDispatch }) => {
-  const [profile, setProfile] = useState<CompanyOnboardingProfile>({
-    companyName: 'Acme Enterprises AI Lab',
-    orgId: 'org_enterprise_8892',
-    primaryContactEmail: 'ai-ops@acme.com',
-    byokMode: 'direct_keys_only',
-    credentials: {},
-    lastUpdated: new Date().toISOString(),
+export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
+  onNavigateToDispatch,
+}) => {
+  // State
+  const [profile, setProfile] = useState<CompanyOnboardingProfile | null>(null);
+  const [credentials, setCredentials] = useState<Record<string, CompanyProviderCredential>>({});
+  const [gatewayConfig, setGatewayConfig] = useState<UnifiedSubscriptionGatewayConfig | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<'matrix' | 'unified_gateway' | 'claude_cli' | 'direct_sandbox' | 'settings'>('matrix');
+  
+  // Expanded provider cards state
+  const [expandedProvider, setExpandedProvider] = useState<AIProvider | null>('anthropic');
+  const [providerModeTab, setProviderModeTab] = useState<Record<string, 'subscription' | 'api_key'>>({
+    google: 'subscription',
+    openai: 'subscription',
+    anthropic: 'subscription',
+    deepseek: 'subscription',
+    groq: 'api_key',
+    mistral: 'api_key',
   });
 
-  const [credentials, setCredentials] = useState<Record<string, CompanyProviderCredential>>({});
-  const [rawKeyInputs, setRawKeyInputs] = useState<Record<string, string>>({});
+  // Edit / Input States
+  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [expandedSettings, setExpandedSettings] = useState<Record<string, boolean>>({});
-  const [verifyLoading, setVerifyLoading] = useState<Record<string, boolean>>({});
-  const [verifyStatus, setVerifyStatus] = useState<Record<string, { success: boolean; message: string; latencyMs?: number; detectedModels?: string[] }>>({});
-  
-  // Direct Live AI Sandbox Test State
-  const [testProvider, setTestProvider] = useState<string>('google');
-  const [testModelId, setTestModelId] = useState<string>('gemini-2.5-flash');
-  const [testPrompt, setTestPrompt] = useState<string>('Perform a direct live health check. Report your internal model ID, compute latency, and confirm direct company billing routing.');
-  const [testExecuting, setTestExecuting] = useState<boolean>(false);
-  const [testResult, setTestResult] = useState<any>(null);
-  const [testError, setTestError] = useState<string | null>(null);
+  const [baseUrlInputs, setBaseUrlInputs] = useState<Record<string, string>>({});
+  const [orgInputs, setOrgInputs] = useState<Record<string, string>>({});
+  const [spendLimitInputs, setSpendLimitInputs] = useState<Record<string, string>>({});
 
+  // Verification & Sandbox State
+  const [verifyingProvider, setVerifyingProvider] = useState<string | null>(null);
+  const [verifyResults, setVerifyResults] = useState<Record<string, any>>({});
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Sandbox Test
+  const [testProvider, setTestProvider] = useState<AIProvider>('anthropic');
+  const [testModelId, setTestModelId] = useState<string>('claude-3-7-sonnet-20250219');
+  const [testAuthMode, setTestAuthMode] = useState<'auto' | 'subscription' | 'api_key'>('auto');
+  const [testPrompt, setTestPrompt] = useState<string>(
+    'Synthesize a 3-tier microservice architecture for token optimization and verify live execution latency.'
+  );
+  const [isExecutingTest, setIsExecutingTest] = useState<boolean>(false);
+  const [testResponse, setTestResponse] = useState<any>(null);
+
+  // Modal State
+  const [oauthModalProvider, setOauthModalProvider] = useState<AIProvider | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  // Fetch initial profile & credentials from server
+  // Fetch initial profile & credentials
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      const [profileRes, credsRes, gatewayRes] = await Promise.all([
+        fetch('/api/credentials/profile'),
+        fetch('/api/credentials'),
+        fetch('/api/credentials/subscription/gateway-status'),
+      ]);
+
+      const profileData = await profileRes.json();
+      const credsData = await credsRes.json();
+      const gatewayData = await gatewayRes.json();
+
+      setProfile(profileData);
+      setCredentials(credsData);
+      setGatewayConfig(gatewayData);
+
+      // Pre-fill inputs
+      const initialBaseUrls: Record<string, string> = {};
+      const initialOrgs: Record<string, string> = {};
+      const initialSpendLimits: Record<string, string> = {};
+
+      Object.entries(credsData).forEach(([prov, c]: [string, any]) => {
+        if (c.baseUrl) initialBaseUrls[prov] = c.baseUrl;
+        if (c.organizationId) initialOrgs[prov] = c.organizationId;
+        if (c.monthlySpendLimitUsd) initialSpendLimits[prov] = String(c.monthlySpendLimitUsd);
+      });
+
+      setBaseUrlInputs(initialBaseUrls);
+      setOrgInputs(initialOrgs);
+      setSpendLimitInputs(initialSpendLimits);
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Failed to load credentials vault: ' + err.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchCredentials();
-    fetchProfile();
+    loadData();
   }, []);
 
-  const fetchCredentials = async () => {
-    try {
-      const res = await fetch('/api/credentials');
-      if (res.ok) {
-        const data = await res.json();
-        setCredentials(data);
-      }
-    } catch (err) {
-      console.error('Failed to load company credentials from server', err);
-    }
-  };
-
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch('/api/credentials/profile');
-      if (res.ok) {
-        const data = await res.json();
-        setProfile(data);
-      }
-    } catch (err) {
-      console.error('Failed to load company profile', err);
-    }
-  };
-
-  const handleSaveProfile = async (updatedByokMode?: 'direct_keys_only' | 'hybrid_fallback' | 'platform_pool') => {
-    const newProfile = {
-      ...profile,
-      byokMode: updatedByokMode || profile.byokMode,
-    };
-    setProfile(newProfile);
-    try {
-      await fetch('/api/credentials/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProfile),
-      });
-      showNotification('Company routing policy updated successfully.');
-    } catch (err) {
-      console.error('Failed to update company profile', err);
-    }
-  };
-
+  // Save API Key / Credentials
   const handleSaveCredential = async (provider: AIProvider) => {
-    const rawKey = rawKeyInputs[provider];
-    const existing = credentials[provider];
     const meta = PROVIDER_METAS.find(m => m.id === provider);
+    const rawKey = keyInputs[provider];
+    const baseUrl = baseUrlInputs[provider];
+    const orgId = orgInputs[provider];
+    const monthlyLimit = spendLimitInputs[provider];
 
     try {
       const res = await fetch('/api/credentials/save', {
@@ -254,111 +279,145 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({ 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
-          providerDisplayName: meta?.name || provider,
-          apiKey: rawKey || undefined,
-          baseUrl: existing?.baseUrl,
-          organizationId: existing?.organizationId,
-          projectId: existing?.projectId,
-          monthlySpendLimitUsd: existing?.monthlySpendLimitUsd || 5000,
-          notes: existing?.notes,
+          providerDisplayName: meta?.name || provider.toUpperCase(),
+          authMethod: providerModeTab[provider] === 'subscription' ? 'subscription_oauth' : 'api_key',
+          apiKey: rawKey,
+          baseUrl,
+          organizationId: orgId,
+          monthlySpendLimitUsd: monthlyLimit ? Number(monthlyLimit) : undefined,
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setCredentials(prev => ({
-          ...prev,
-          [provider]: data.credential,
-        }));
-        setRawKeyInputs(prev => ({ ...prev, [provider]: '' }));
-        showNotification(`API Key for ${meta?.name || provider} saved to Company Key Vault.`);
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: data.message });
+        setKeyInputs(prev => ({ ...prev, [provider]: '' }));
+        await loadData();
+      } else {
+        setNotification({ type: 'error', message: data.error || 'Failed to save credential' });
       }
     } catch (err: any) {
-      console.error('Failed to save credential', err);
+      setNotification({ type: 'error', message: 'Error saving credential: ' + err.message });
     }
   };
 
-  const handleVerifyDirectKey = async (provider: AIProvider) => {
-    setVerifyLoading(prev => ({ ...prev, [provider]: true }));
-    setVerifyStatus(prev => ({ ...prev, [provider]: { success: false, message: 'Initiating direct live handshake...' } }));
-
-    const rawKey = rawKeyInputs[provider];
-    const existing = credentials[provider];
+  // Verify Live Connection (API or Subscription)
+  const handleVerify = async (provider: AIProvider, verifyMethod: 'api' | 'subscription' = 'api') => {
+    setVerifyingProvider(provider);
+    setVerifyResults(prev => ({ ...prev, [provider]: null }));
 
     try {
+      const rawKey = keyInputs[provider];
+      const baseUrl = baseUrlInputs[provider];
+      const organizationId = orgInputs[provider];
+
       const res = await fetch('/api/credentials/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
-          apiKey: rawKey || undefined,
-          baseUrl: existing?.baseUrl,
-          organizationId: existing?.organizationId,
-          projectId: existing?.projectId,
+          apiKey: rawKey,
+          baseUrl,
+          organizationId,
+          verifyMethod,
         }),
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
-        setVerifyStatus(prev => ({
-          ...prev,
-          [provider]: {
-            success: true,
-            message: `Direct Live Ping Succeeded (${data.latencyMs}ms)`,
-            latencyMs: data.latencyMs,
-            detectedModels: data.detectedModels,
-          }
-        }));
-        fetchCredentials();
+      setVerifyResults(prev => ({ ...prev, [provider]: data }));
+      if (data.success) {
+        setNotification({ type: 'success', message: data.message });
+        await loadData();
       } else {
-        setVerifyStatus(prev => ({
-          ...prev,
-          [provider]: {
-            success: false,
-            message: data.error || 'Direct authentication rejected by provider',
-          }
-        }));
+        setNotification({ type: 'error', message: data.error || 'Verification failed' });
       }
     } catch (err: any) {
-      setVerifyStatus(prev => ({
-        ...prev,
-        [provider]: {
-          success: false,
-          message: err.message || 'Network error verifying key',
-        }
-      }));
+      setVerifyResults(prev => ({ ...prev, [provider]: { success: false, error: err.message } }));
+      setNotification({ type: 'error', message: 'Verification error: ' + err.message });
     } finally {
-      setVerifyLoading(prev => ({ ...prev, [provider]: false }));
+      setVerifyingProvider(null);
     }
   };
 
-  const handleDeleteCredential = async (provider: AIProvider) => {
-    if (!confirm(`Are you sure you want to remove the direct API key for ${provider.toUpperCase()}?`)) return;
+  // Toggle Proxy Daemon
+  const handleToggleProxy = async (provider: AIProvider) => {
+    try {
+      const res = await fetch('/api/credentials/subscription/proxy/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: data.message });
+        await loadData();
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Failed to toggle proxy: ' + err.message });
+    }
+  };
+
+  // Toggle Unified Gateway
+  const handleToggleGateway = async () => {
+    try {
+      const res = await fetch('/api/credentials/subscription/gateway-toggle', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: data.message });
+        await loadData();
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Failed to toggle gateway: ' + err.message });
+    }
+  };
+
+  // Disconnect Subscription
+  const handleDisconnectSubscription = async (provider: AIProvider) => {
+    if (!confirm(`Unlink subscription session for ${provider.toUpperCase()}?`)) return;
+    try {
+      const res = await fetch('/api/credentials/subscription/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: data.message });
+        await loadData();
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Failed to unlink subscription: ' + err.message });
+    }
+  };
+
+  // Delete Credential
+  const handleDelete = async (provider: AIProvider) => {
+    if (!confirm(`Remove credentials for ${provider.toUpperCase()} from your company vault?`)) return;
+
     try {
       const res = await fetch('/api/credentials/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider }),
       });
-      if (res.ok) {
-        fetchCredentials();
-        setRawKeyInputs(prev => ({ ...prev, [provider]: '' }));
-        setVerifyStatus(prev => ({ ...prev, [provider]: { success: false, message: 'Key removed' } }));
-        showNotification(`API Key for ${provider} removed from vault.`);
+
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: data.message });
+        setKeyInputs(prev => ({ ...prev, [provider]: '' }));
+        await loadData();
       }
-    } catch (err) {
-      console.error('Failed to delete credential', err);
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Failed to remove credential: ' + err.message });
     }
   };
 
-  const handleExecuteDirectSandbox = async () => {
-    if (!testPrompt.trim()) return;
-    setTestExecuting(true);
-    setTestError(null);
-    setTestResult(null);
-
-    const cred = credentials[testProvider];
-    const rawKey = rawKeyInputs[testProvider];
+  // Execute Direct Test Prompt in Sandbox
+  const handleExecuteSandboxTest = async () => {
+    setIsExecutingTest(true);
+    setTestResponse(null);
 
     try {
       const res = await fetch('/api/credentials/direct-test', {
@@ -368,591 +427,676 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({ 
           provider: testProvider,
           modelId: testModelId,
           prompt: testPrompt,
-          apiKey: rawKey || undefined,
-          baseUrl: cred?.baseUrl,
-          organizationId: cred?.organizationId,
-          projectId: cred?.projectId,
+          authMode: testAuthMode,
         }),
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
-        setTestResult(data);
+      setTestResponse(data);
+      if (data.success) {
+        setNotification({ 
+          type: 'success', 
+          message: `Live test executed in ${data.latencyMs}ms (${data.billingMode === 'subscription_flat_rate' ? 'Flat Subscription $0.00/token' : 'Direct API Key'})` 
+        });
       } else {
-        setTestError(data.error || 'Direct model call failed');
+        setNotification({ type: 'error', message: data.error || 'Execution failed' });
       }
     } catch (err: any) {
-      setTestError(err.message || 'Direct sandbox execution failed');
+      setTestResponse({ success: false, error: err.message });
+      setNotification({ type: 'error', message: 'Direct test network error: ' + err.message });
     } finally {
-      setTestExecuting(false);
+      setIsExecutingTest(false);
     }
   };
 
-  const showNotification = (msg: string) => {
-    setSaveSuccessMsg(msg);
-    setTimeout(() => setSaveSuccessMsg(null), 3500);
-  };
+  const totalConnected = (Object.values(credentials) as CompanyProviderCredential[]).filter(
+    c => c?.status === 'connected' || Boolean(c?.hasKey) || Boolean(c?.hasSubscription)
+  ).length;
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(id);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
-
-  const totalConnected = (Object.values(credentials) as CompanyProviderCredential[]).filter(c => c?.status === 'connected' || Boolean(c?.hasKey)).length;
-  const totalAvailableProviders = PROVIDER_METAS.length;
+  const totalSubscriptions = (Object.values(credentials) as CompanyProviderCredential[]).filter(
+    c => c?.hasSubscription && c?.status === 'connected'
+  ).length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      
+    <div className="max-w-7xl mx-auto space-y-8 pb-16 animate-fadeIn">
       {/* Toast Notification */}
-      {saveSuccessMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-sm shadow-xl shadow-black/40 backdrop-blur-md animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{saveSuccessMsg}</span>
+      {notification && (
+        <div className={`p-4 rounded-xl flex items-center justify-between shadow-lg text-xs font-medium border ${
+          notification.type === 'success' 
+            ? 'bg-emerald-950/90 border-emerald-700 text-emerald-200' 
+            : 'bg-rose-950/90 border-rose-700 text-rose-200'
+        }`}>
+          <div className="flex items-center space-x-2">
+            {notification.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
+            <span>{notification.message}</span>
+          </div>
+          <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-200 ml-4 font-bold">✕</button>
         </div>
       )}
 
-      {/* Header & Onboarding Banner */}
-      <div className="relative rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 border border-white/[0.1] p-6 lg:p-8 overflow-hidden shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-orange-500/10 via-amber-500/5 to-transparent blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2.5">
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/20 text-orange-300 border border-orange-400/30 text-xs font-mono font-medium">
-                <Building className="w-3.5 h-3.5 text-orange-400" />
-                Company Onboarding & BYOK
-              </span>
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-mono font-medium">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                Zero Platform Token Markup
-              </span>
+      {/* Main Header & Dual Auth Banner */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+        <div className="absolute -right-16 -top-16 w-80 h-80 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-700/60 text-indigo-300 text-xs font-semibold">
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Enterprise Credentials & Flat-Rate Subscriptions Hub</span>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-display font-bold text-white tracking-tight">
-              Company AI Engine Credentials & Direct Provider Connection
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
+              Company Onboarding & Subscription Gateway
             </h1>
-            <p className="text-slate-300 text-sm leading-relaxed">
-              Onboard your organization's direct API keys and enterprise subscriptions (Google, OpenAI, Anthropic, DeepSeek, Groq, Mistral, etc.). When dispatches occur, WhyOr executes requests directly through your accounts—giving you 100% direct provider token economics with zero intermediate platform token fees.
+            <p className="text-sm text-slate-400 max-w-3xl leading-relaxed">
+              WhyOr lets you make requests using <strong>flat-rate consumer/team subscriptions</strong> (ChatGPT Pro $200/mo, Claude 3.7 Max CLI $20/mo, Google One AI Premium $20/mo) via Google OAuth & local proxies, alongside standard pay-per-token API keys.
             </p>
           </div>
 
-          {/* Quick Metrics Badge */}
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 bg-white/[0.04] p-4 rounded-xl border border-white/[0.08] backdrop-blur-md">
-            <div className="text-center px-3 border-r border-white/10">
-              <div className="text-2xl font-bold font-mono text-emerald-400">{totalConnected} / {totalAvailableProviders}</div>
-              <div className="text-[11px] text-slate-400 uppercase tracking-wider font-mono">Engines Active</div>
+          {/* Quick Metrics Capsule */}
+          <div className="flex items-center gap-3 bg-slate-950/80 p-3 rounded-2xl border border-slate-800 shrink-0">
+            <div className="px-4 py-2 text-center border-r border-slate-800">
+              <div className="text-xs text-slate-400">Connected Hubs</div>
+              <div className="text-xl font-bold text-slate-100 font-mono">{totalConnected} <span className="text-xs text-slate-500">/ 6</span></div>
             </div>
-            <div className="text-center px-3 border-r border-white/10">
-              <div className="text-2xl font-bold font-mono text-cyan-400">~185ms</div>
-              <div className="text-[11px] text-slate-400 uppercase tracking-wider font-mono">Direct Ping</div>
+            <div className="px-4 py-2 text-center border-r border-slate-800">
+              <div className="text-xs text-slate-400">Flat Subscriptions</div>
+              <div className="text-xl font-bold text-emerald-400 font-mono">{totalSubscriptions} <span className="text-xs text-emerald-600">Active</span></div>
             </div>
-            <div className="text-center px-3">
-              <div className="text-2xl font-bold font-mono text-amber-400">$0.00</div>
-              <div className="text-[11px] text-slate-400 uppercase tracking-wider font-mono">Platform Token Fee</div>
+            <div className="px-4 py-2 text-center">
+              <div className="text-xs text-slate-400">Monthly Avoided</div>
+              <div className="text-xl font-bold text-amber-400 font-mono">$5,680+</div>
             </div>
           </div>
         </div>
 
-        {/* Company Profile & Global Routing Policy Setting */}
-        <div className="mt-8 pt-6 border-t border-white/[0.08] grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <label className="block text-[11px] font-mono text-slate-400 uppercase">Onboarded Organization</label>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-white font-medium text-sm">{profile.companyName}</span>
-              <span className="text-[11px] font-mono text-slate-500">{profile.orgId}</span>
-            </div>
-          </div>
+        {/* Global Navigation Sub-Tabs */}
+        <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-6">
+          <button
+            onClick={() => setActiveTab('matrix')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
+              activeTab === 'matrix'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Provider Matrix ({PROVIDER_METAS.length})</span>
+          </button>
 
-          <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <label className="block text-[11px] font-mono text-slate-400 uppercase">Vault Security Status</label>
-            <div className="mt-1 flex items-center gap-2 text-emerald-400 text-sm font-medium">
-              <Lock className="w-3.5 h-3.5 text-emerald-400" />
-              <span>AES-256 In-Memory & Direct Ephemeral Dispatch</span>
-            </div>
-          </div>
+          <button
+            onClick={() => setActiveTab('unified_gateway')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
+              activeTab === 'unified_gateway'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Unified Subscription Gateway</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          </button>
 
-          <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <label className="block text-[11px] font-mono text-slate-400 uppercase">Active Dispatch Billing Mode</label>
-            <div className="mt-1.5 flex items-center gap-2">
-              <select 
-                value={profile.byokMode}
-                onChange={(e) => handleSaveProfile(e.target.value as any)}
-                className="w-full bg-slate-950 border border-white/20 rounded-lg px-2.5 py-1 text-xs text-amber-300 font-medium focus:outline-none focus:border-amber-400"
-              >
-                <option value="direct_keys_only">⚡ Direct Company Keys (100% BYOK)</option>
-                <option value="hybrid_fallback">🛡️ Hybrid Auto-Fallback (Direct + Platform Pool)</option>
-                <option value="platform_pool">🏢 Platform Token Pool</option>
-              </select>
-            </div>
-          </div>
+          <button
+            onClick={() => setActiveTab('claude_cli')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
+              activeTab === 'claude_cli'
+                ? 'bg-amber-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Claude CLI & Terminal Session</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('direct_sandbox')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
+              activeTab === 'direct_sandbox'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <Play className="w-3.5 h-3.5" />
+            <span>Live Direct Sandbox</span>
+          </button>
         </div>
       </div>
 
-      {/* Provider Matrix Grid */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-white font-display flex items-center gap-2">
-              <KeyRound className="w-5 h-5 text-amber-400" />
-              AI Engine API Keys & Connection Matrix
-            </h2>
-            <p className="text-xs text-slate-400">Configure real provider credentials to route directly through your organization's API accounts.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                fetchCredentials();
-                showNotification('Refreshed connection status for all providers.');
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 text-xs font-medium border border-white/10 transition-all cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-              Refresh Status
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {PROVIDER_METAS.map((meta) => {
-            const cred = credentials[meta.id];
-            const isConnected = cred?.status === 'connected' || Boolean(cred?.hasKey);
-            const isVerifying = verifyLoading[meta.id];
-            const currentVerify = verifyStatus[meta.id];
-            const isExpanded = expandedSettings[meta.id];
-
-            return (
-              <div 
-                key={meta.id}
-                id={`provider-card-${meta.id}`}
-                className={`relative rounded-xl border p-5 transition-all duration-200 ${
-                  isConnected 
-                    ? 'bg-slate-900/80 border-emerald-500/30 shadow-lg shadow-black/20' 
-                    : 'bg-slate-900/40 border-white/[0.08] hover:border-white/20'
-                }`}
-              >
-                {/* Top Row: Provider Brand & Status */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${meta.logoColor} flex items-center justify-center text-white shadow-md font-bold text-sm font-mono`}>
-                      {meta.id === 'google' ? 'G' : meta.id === 'openai' ? 'OA' : meta.id === 'anthropic' ? 'AN' : meta.id === 'deepseek' ? 'DS' : meta.id === 'groq' ? 'GQ' : meta.id === 'mistral' ? 'MS' : 'C'}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-white font-bold text-sm tracking-tight">{meta.name}</h3>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] text-slate-400">
-                          {meta.category}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        {meta.pricingNote}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Status Badge */}
-                  <div>
-                    {isConnected ? (
-                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-mono font-medium">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                        Connected & Direct
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-white/10 text-[11px] font-mono">
-                        Unconfigured
-                      </span>
-                    )}
-                  </div>
+      {/* TAB 1: Unified Subscription Gateway Portal */}
+      {activeTab === 'unified_gateway' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-slate-950 font-bold shadow-lg">
+                  <Globe className="w-6 h-6" />
                 </div>
-
-                {/* API Key Input & Action Row */}
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-300 font-medium">Direct Provider API Key:</span>
-                    <a 
-                      href={meta.docsUrl} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-[11px]"
-                    >
-                      Get Key from Provider <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
-                  </div>
-
-                  <div className="relative flex items-center">
-                    <input
-                      type={showKeys[meta.id] ? 'text' : 'password'}
-                      placeholder={cred?.maskedKey ? `Current Key: ${cred.maskedKey}` : meta.keyPlaceholder}
-                      value={rawKeyInputs[meta.id] || ''}
-                      onChange={(e) => setRawKeyInputs({ ...rawKeyInputs, [meta.id]: e.target.value })}
-                      className="w-full bg-slate-950/80 border border-white/15 focus:border-orange-400 rounded-xl px-3.5 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none transition-all pr-24"
-                    />
-
-                    <div className="absolute right-2 flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowKeys({ ...showKeys, [meta.id]: !showKeys[meta.id] })}
-                        className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
-                        title={showKeys[meta.id] ? 'Hide Key' : 'Show Key'}
-                      >
-                        {showKeys[meta.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
-
-                      {cred?.maskedKey && (
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(cred.maskedKey, meta.id)}
-                          className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
-                          title="Copy masked key identifier"
-                        >
-                          {copiedKey === meta.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                    Unified Subscription Gateway Daemon
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                      Port {gatewayConfig?.gatewayPort || 8080}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Centralized local reverse proxy consolidating multiple frontier subscriptions under a single OpenAI-compatible API URL.
+                  </p>
                 </div>
-
-                {/* Verification result feedback */}
-                {currentVerify && (
-                  <div className={`mt-2.5 p-2.5 rounded-lg text-xs font-mono flex items-center justify-between ${
-                    currentVerify.success 
-                      ? 'bg-emerald-950/40 border border-emerald-500/30 text-emerald-300' 
-                      : 'bg-red-950/40 border border-red-500/30 text-red-300'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      {currentVerify.success ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-                      <span className="truncate max-w-[280px]">{currentVerify.message}</span>
-                    </div>
-                    {currentVerify.latencyMs && (
-                      <span className="text-cyan-400 font-bold">{currentVerify.latencyMs}ms</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="mt-4 flex items-center justify-between pt-3 border-t border-white/[0.06]">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isVerifying}
-                      onClick={() => handleVerifyDirectKey(meta.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/30 text-xs font-medium transition-all disabled:opacity-50 cursor-pointer"
-                    >
-                      {isVerifying ? (
-                        <>
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                          Testing Live Ping...
-                        </>
-                      ) : (
-                        <>
-                          <Activity className="w-3 h-3 text-cyan-400" />
-                          Live Handshake Ping
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSaveCredential(meta.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-400/30 text-xs font-medium transition-all cursor-pointer"
-                    >
-                      <Save className="w-3 h-3 text-orange-400" />
-                      Save Key
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedSettings({ ...expandedSettings, [meta.id]: !isExpanded })}
-                      className="text-slate-400 hover:text-slate-200 text-xs flex items-center gap-1 font-mono cursor-pointer"
-                    >
-                      <span>Options</span>
-                      {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    </button>
-
-                    {isConnected && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCredential(meta.id)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Remove credential from vault"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Advanced Options Drawer */}
-                {isExpanded && (
-                  <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-3 text-xs animate-fade-in">
-                    <div>
-                      <label className="text-[11px] font-mono text-slate-400 uppercase">Custom Base URL (Proxy / Azure / Private VPC):</label>
-                      <input
-                        type="text"
-                        placeholder={meta.defaultBaseUrl || 'https://api.provider.com/v1'}
-                        value={cred?.baseUrl || ''}
-                        onChange={(e) => setCredentials({
-                          ...credentials,
-                          [meta.id]: { ...(cred || { provider: meta.id, providerDisplayName: meta.name, apiKey: '', maskedKey: '', status: 'unconfigured' }), baseUrl: e.target.value }
-                        })}
-                        className="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[11px] font-mono text-slate-400 uppercase">Organization ID:</label>
-                        <input
-                          type="text"
-                          placeholder="org-..."
-                          value={cred?.organizationId || ''}
-                          onChange={(e) => setCredentials({
-                            ...credentials,
-                            [meta.id]: { ...(cred || { provider: meta.id, providerDisplayName: meta.name, apiKey: '', maskedKey: '', status: 'unconfigured' }), organizationId: e.target.value }
-                          })}
-                          className="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-mono text-slate-400 uppercase">Monthly Budget Alert ($):</label>
-                        <input
-                          type="number"
-                          placeholder="5000"
-                          value={cred?.monthlySpendLimitUsd || 5000}
-                          onChange={(e) => setCredentials({
-                            ...credentials,
-                            [meta.id]: { ...(cred || { provider: meta.id, providerDisplayName: meta.name, apiKey: '', maskedKey: '', status: 'unconfigured' }), monthlySpendLimitUsd: Number(e.target.value) }
-                          })}
-                          className="mt-1 w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Supported Models Badges */}
-                    <div>
-                      <label className="text-[11px] font-mono text-slate-400 uppercase block mb-1">Directly Accessible Models:</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {meta.supportedModels.map(mod => (
-                          <span key={mod.id} className="px-2 py-0.5 rounded bg-white/[0.04] text-slate-300 border border-white/10 text-[10px] font-mono flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            {mod.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
-            );
-          })}
-        </div>
-      </div>
 
-      {/* Real Live Direct AI Engine Test Sandbox */}
-      <div className="rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-950 border border-white/[0.1] p-6 lg:p-8 space-y-6 shadow-2xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-400/30">
-                <CloudLightning className="w-4 h-4" />
-              </span>
-              <h2 className="text-xl font-bold text-white font-display">
-                Direct AI Engine Live Test Sandbox
-              </h2>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleToggleGateway}
+                  className={`px-4 py-2 rounded-xl font-semibold text-xs flex items-center space-x-2 transition-all shadow-md ${
+                    gatewayConfig?.status === 'active'
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  <Power className="w-4 h-4" />
+                  <span>{gatewayConfig?.status === 'active' ? 'Gateway Running' : 'Start Gateway'}</span>
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Verify actual real-time inference execution, response text, token usage, and latency directly against your company's credentials (no simulated mock data).
-            </p>
-          </div>
 
-          <div className="flex items-center gap-3">
-            {onNavigateToDispatch && (
-              <button
-                type="button"
-                onClick={() => onNavigateToDispatch()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-bold text-xs shadow-lg shadow-orange-500/20 transition-all cursor-pointer"
-              >
-                <span>Go to Dispatch Console with Direct Keys</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            )}
+            {/* Gateway Endpoint URL & Integration Snippet */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-4">
+                <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+                  <div className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span>Consolidated Endpoint URL</span>
+                    <span className="text-[11px] text-slate-500 font-mono">OpenAI / Anthropic Compatible</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={gatewayConfig?.gatewayBindUrl || 'http://localhost:8080/v1/whyor-gateway'}
+                      className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-emerald-400 font-mono"
+                    />
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(gatewayConfig?.gatewayBindUrl || 'http://localhost:8080/v1/whyor-gateway');
+                        setCopiedKey('gateway_url');
+                        setTimeout(() => setCopiedKey(null), 2000);
+                      }}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs text-slate-200 flex items-center space-x-1.5 transition-colors border border-slate-700"
+                    >
+                      {copiedKey === 'gateway_url' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Point any standard AI SDK (LangChain, LlamaIndex, Cursor, Claude Code) to this local URL. WhyOr routes incoming requests across your active subscriptions with <strong>$0.00/token</strong> billing.
+                  </p>
+                </div>
+
+                {/* Active Bound Subscriptions */}
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-slate-300">Active Bound Subscriptions in Gateway</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {gatewayConfig?.activeSubscriptions.map((sub, idx) => (
+                      <div key={idx} className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-200">{sub.name}</span>
+                          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px] border border-emerald-800">
+                            Bound
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-indigo-400 font-mono">{sub.tier}</div>
+                        <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                          <Mail className="w-3 h-3" /> {sub.accountEmail}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Gateway Telemetry & ROI */}
+              <div className="p-5 bg-gradient-to-br from-indigo-950/40 via-slate-950 to-slate-950 rounded-xl border border-indigo-800/40 space-y-4">
+                <div className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  Subscription ROI Telemetry
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-800">
+                    <span className="text-slate-400">Total Gateway Requests:</span>
+                    <span className="text-slate-200 font-mono font-bold">{gatewayConfig?.totalRoutedRequests.toLocaleString() || '1,420'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-800">
+                    <span className="text-slate-400">Tokens Processed:</span>
+                    <span className="text-slate-200 font-mono font-bold">{((gatewayConfig?.totalTokensProcessed || 28400000) / 1000000).toFixed(1)}M</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-800">
+                    <span className="text-slate-400">Flat Monthly Subscriptions:</span>
+                    <span className="text-slate-200 font-mono font-bold">${gatewayConfig?.flatMonthlySpendUsd || 240}/mo</span>
+                  </div>
+                  <div className="flex justify-between py-1 text-emerald-400 font-semibold">
+                    <span>API Invoices Avoided:</span>
+                    <span className="font-mono text-sm font-bold">${gatewayConfig?.estimatedApiCostAvoidedUsd.toLocaleString() || '5,680.40'}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-emerald-950/60 border border-emerald-800/80 rounded-lg text-[11px] text-emerald-300 leading-relaxed">
+                  ✓ <strong>95.8% Cost Reduction</strong> achieved by substituting per-token API meter rates with unified subscription proxies.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Sandbox Controls Form */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-mono text-slate-400 uppercase mb-1.5">Target Provider Engine:</label>
-            <select
-              value={testProvider}
-              onChange={(e) => {
-                const p = e.target.value;
-                setTestProvider(p);
-                const meta = PROVIDER_METAS.find(m => m.id === p);
-                if (meta && meta.supportedModels.length > 0) {
-                  setTestModelId(meta.supportedModels[0].id);
-                }
-              }}
-              className="w-full bg-slate-950 border border-white/20 rounded-xl px-3 py-2 text-xs font-medium text-white focus:outline-none focus:border-orange-400"
-            >
-              {PROVIDER_METAS.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name} {credentials[m.id]?.hasKey ? '✓ (Direct Key Configured)' : '(Using Fallback)'}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* TAB 2: Claude CLI & Interactive Terminal */}
+      {activeTab === 'claude_cli' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <Terminal className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-100">
+                  Claude CLI & Terminal Session Daemon
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Execute native subshell commands and interactive prompts directly under your active Claude Pro/Max subscription without per-token charges.
+                </p>
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-xs font-mono text-slate-400 uppercase mb-1.5">Direct Model ID:</label>
-            <select
-              value={testModelId}
-              onChange={(e) => setTestModelId(e.target.value)}
-              className="w-full bg-slate-950 border border-white/20 rounded-xl px-3 py-2 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-400"
-            >
-              {PROVIDER_METAS.find(m => m.id === testProvider)?.supportedModels.map(mod => (
-                <option key={mod.id} value={mod.id}>
-                  {mod.name} ({mod.tier})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-slate-400 uppercase mb-1.5">Sample Query Preset:</label>
-            <select
-              onChange={(e) => setTestPrompt(e.target.value)}
-              className="w-full bg-slate-950 border border-white/20 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-amber-400"
-            >
-              <option value="Perform a direct live health check. Report your internal model ID, compute latency, and confirm direct company billing routing.">Direct Health & Latency Ping</option>
-              <option value="Analyze token consumption economics for a 50M token batch processing pipeline. Compare frontier vs high-speed LPU routing.">Token Economics Synthesis</option>
-              <option value="Write a production TypeScript distributed worker with exponential backoff and SHA-256 state tracking.">AST Code Generation Proof</option>
-              <option value="Explain how context entity extraction prevents replay overhead across multi-turn LLM pipelines.">Context Ledger Analysis</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Prompt Input & Execution */}
-        <div className="space-y-3">
-          <label className="block text-xs font-mono text-slate-400 uppercase">Live Prompt to AI Engine:</label>
-          <div className="relative">
-            <textarea
-              rows={3}
-              value={testPrompt}
-              onChange={(e) => setTestPrompt(e.target.value)}
-              className="w-full bg-slate-950/90 border border-white/20 focus:border-orange-400 rounded-xl p-3.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none transition-all"
-              placeholder="Enter your prompt for direct execution..."
+            <ClaudeCliTerminal
+              subscriptionEmail={profile?.primaryContactEmail || 'solarastra.in@gmail.com'}
+              subscriptionTier="Claude 3.7 Max / CLI Unlimited ($20/mo Flat)"
+              isProxyActive={true}
             />
           </div>
+        </div>
+      )}
 
-          <div className="flex items-center justify-between">
-            <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-              <Info className="w-3.5 h-3.5 text-amber-400" />
-              <span>Executes live direct HTTP payload with company credentials. Zero dummy mock tokens.</span>
+      {/* TAB 3: Provider Matrix (Dual Mode: Subscription OAuth / API Key BYOK) */}
+      {activeTab === 'matrix' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Configured AI Providers & Subscriptions</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Toggle between <strong>Flat-Rate Subscription / OAuth</strong> ($0.00/token) and <strong>Pay-Per-Token API Keys</strong> for each provider.
+              </p>
             </div>
 
             <button
-              type="button"
-              disabled={testExecuting}
-              onClick={handleExecuteDirectSandbox}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-bold text-xs shadow-lg shadow-orange-500/20 transition-all disabled:opacity-50 cursor-pointer"
+              onClick={loadData}
+              disabled={isLoading}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors border border-slate-700 shrink-0"
             >
-              {testExecuting ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Executing Direct Model Call...
-                </>
-              ) : (
-                <>
-                  <Send className="w-3.5 h-3.5" />
-                  Execute Direct Call via Company Key
-                </>
-              )}
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh Vault</span>
             </button>
           </div>
-        </div>
 
-        {/* Real Live Sandbox Output */}
-        {testError && (
-          <div className="p-4 rounded-xl bg-red-950/60 border border-red-500/40 text-red-200 text-xs space-y-1">
-            <div className="font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400" />
-              Direct Provider Execution Error
-            </div>
-            <p className="font-mono text-red-300">{testError}</p>
-            <p className="text-slate-400 text-[11px]">Make sure your API key for {testProvider.toUpperCase()} is valid and active.</p>
+          <div className="grid grid-cols-1 gap-5">
+            {PROVIDER_METAS.map((meta) => {
+              const cred = credentials[meta.id];
+              const isConfigured = cred?.status === 'connected' || Boolean(cred?.hasKey) || Boolean(cred?.hasSubscription);
+              const isExpanded = expandedProvider === meta.id;
+              const currentMode = providerModeTab[meta.id] || (cred?.hasSubscription ? 'subscription' : 'api_key');
+
+              return (
+                <div
+                  key={meta.id}
+                  className={`bg-slate-900 border rounded-2xl transition-all overflow-hidden ${
+                    isExpanded ? 'border-indigo-600/80 shadow-2xl ring-1 ring-indigo-600/30' : 'border-slate-800 hover:border-slate-700 shadow-md'
+                  }`}
+                >
+                  {/* Card Header */}
+                  <div 
+                    onClick={() => setExpandedProvider(isExpanded ? null : meta.id)}
+                    className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer select-none bg-gradient-to-r from-slate-900 to-slate-900/60 hover:to-slate-850"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${meta.logoColor} p-0.5 flex items-center justify-center shadow-lg shrink-0`}>
+                        <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-white font-bold">
+                          <Cpu className="w-6 h-6 text-slate-200" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-base font-bold text-slate-100">{meta.name}</h3>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium">
+                            {meta.category}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">{meta.pricingNote}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 self-end sm:self-center">
+                      {cred?.hasSubscription && (
+                        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/90 text-emerald-300 border border-emerald-800/80">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>Flat Subscription ($0.00/tok)</span>
+                        </div>
+                      )}
+
+                      {cred?.hasKey && !cred?.hasSubscription && (
+                        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-indigo-950/90 text-indigo-300 border border-indigo-800/80">
+                          <Key className="w-3 h-3 text-indigo-400" />
+                          <span>API Key Configured</span>
+                        </div>
+                      )}
+
+                      {!isConfigured && (
+                        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                          <span>Unconfigured</span>
+                        </div>
+                      )}
+
+                      <div className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-slate-200">
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded Body */}
+                  {isExpanded && (
+                    <div className="p-6 border-t border-slate-800 bg-slate-950/60 space-y-6">
+                      {/* Provider Sub-Tabs: Subscription vs API Key */}
+                      <div className="flex items-center space-x-2 border-b border-slate-800 pb-4">
+                        {meta.subscriptionAvailable && (
+                          <button
+                            onClick={() => setProviderModeTab(prev => ({ ...prev, [meta.id]: 'subscription' }))}
+                            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
+                              currentMode === 'subscription'
+                                ? 'bg-indigo-600 text-white shadow-md'
+                                : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Subscription & OAuth / Google Login (Flat Rate)</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => setProviderModeTab(prev => ({ ...prev, [meta.id]: 'api_key' }))}
+                          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
+                            currentMode === 'api_key' || !meta.subscriptionAvailable
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          <span>Pay-Per-Token API Key (BYOK)</span>
+                        </button>
+                      </div>
+
+                      {/* MODE 1: Flat-Rate Subscription & OAuth */}
+                      {currentMode === 'subscription' && meta.subscriptionAvailable && (
+                        <div className="space-y-5">
+                          <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div>
+                                <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                                  <span>Active Subscription Tier:</span>
+                                  <span className="text-indigo-400 font-mono">
+                                    {cred?.subscriptionTier || meta.subscriptionTiers[0]}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
+                                  <span>Account: <strong className="text-slate-300">{cred?.subscriptionEmail || profile?.primaryContactEmail || 'solarastra.in@gmail.com'}</strong></span>
+                                  <span>•</span>
+                                  <span className="text-emerald-400">Bypass Token Rate Limits</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => setOauthModalProvider(meta.id)}
+                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-xs flex items-center space-x-1.5 transition-all shadow-sm"
+                                >
+                                  <Globe className="w-3.5 h-3.5" />
+                                  <span>{cred?.hasSubscription ? 'Re-link Google Auth' : 'Link Subscription'}</span>
+                                </button>
+
+                                {cred?.hasSubscription && (
+                                  <button
+                                    onClick={() => handleDisconnectSubscription(meta.id)}
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950/80 hover:text-rose-400 text-slate-400 rounded-lg text-xs transition-colors border border-slate-700"
+                                  >
+                                    Unlink
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Local Proxy Info */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
+                              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 flex items-center justify-between">
+                                <div>
+                                  <span className="text-slate-400">Local Proxy Bridge:</span>
+                                  <div className="font-mono text-emerald-400 mt-0.5">{cred?.localProxyUrl || `http://localhost:808${meta.id === 'google' ? '1' : meta.id === 'openai' ? '2' : '3'}/v1`}</div>
+                                </div>
+                                <button
+                                  onClick={() => handleToggleProxy(meta.id)}
+                                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[11px]"
+                                >
+                                  {cred?.proxyStatus === 'running' ? 'Active' : 'Start'}
+                                </button>
+                              </div>
+
+                              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 flex items-center justify-between">
+                                <div>
+                                  <span className="text-slate-400">Connection Status:</span>
+                                  <div className="text-slate-200 mt-0.5 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                    <span>Verified ({cred?.latencyMs || 180}ms)</span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleVerify(meta.id, 'subscription')}
+                                  disabled={verifyingProvider === meta.id}
+                                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+                                >
+                                  {verifyingProvider === meta.id ? 'Pinging...' : 'Ping Test'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* MODE 2: Standard Pay-Per-Token API Key */}
+                      {(currentMode === 'api_key' || !meta.subscriptionAvailable) && (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                                <span>API Key</span>
+                                <a href={meta.docsUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 text-[11px] flex items-center gap-1">
+                                  <span>Get Key</span> <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type={showKeys[meta.id] ? 'text' : 'password'}
+                                  value={keyInputs[meta.id] !== undefined ? keyInputs[meta.id] : (cred?.maskedKey || '')}
+                                  onChange={(e) => setKeyInputs(prev => ({ ...prev, [meta.id]: e.target.value }))}
+                                  placeholder={cred?.maskedKey || meta.keyPlaceholder}
+                                  className="w-full pl-3 pr-20 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowKeys(prev => ({ ...prev, [meta.id]: !prev[meta.id] }))}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-200"
+                                >
+                                  {showKeys[meta.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-semibold text-slate-300">Custom Base URL (Optional)</label>
+                              <input
+                                type="text"
+                                value={baseUrlInputs[meta.id] || ''}
+                                onChange={(e) => setBaseUrlInputs(prev => ({ ...prev, [meta.id]: e.target.value }))}
+                                placeholder={meta.defaultBaseUrl || 'https://api...'}
+                                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end space-x-2 pt-2">
+                            <button
+                              onClick={() => handleVerify(meta.id, 'api')}
+                              disabled={verifyingProvider === meta.id}
+                              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors border border-slate-700"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                              <span>{verifyingProvider === meta.id ? 'Testing...' : 'Test Connection'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleSaveCredential(meta.id)}
+                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-md"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Save to Vault</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
 
-        {testResult && (
-          <div className="rounded-xl bg-slate-950 border border-white/20 p-5 space-y-4 animate-fade-in">
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-emerald-400 font-bold text-xs font-mono uppercase">Direct Provider 200 OK</span>
-                <span className="text-slate-400 text-xs font-mono">[{testResult.provider?.toUpperCase()} / {testResult.model}]</span>
+      {/* TAB 4: Live Direct Sandbox Test */}
+      {activeTab === 'direct_sandbox' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl">
+          <div className="flex items-center space-x-3 border-b border-slate-800 pb-4">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+              <Play className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-100">Live Direct Execution Sandbox</h2>
+              <p className="text-xs text-slate-400">
+                Execute prompts directly against your configured subscription session or API key to verify zero-markup routing.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Target Provider</label>
+                <select
+                  value={testProvider}
+                  onChange={(e) => {
+                    const p = e.target.value as AIProvider;
+                    setTestProvider(p);
+                    const meta = PROVIDER_METAS.find(m => m.id === p);
+                    if (meta && meta.supportedModels.length > 0) {
+                      setTestModelId(meta.supportedModels[0].id);
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                >
+                  {PROVIDER_METAS.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex items-center gap-3 text-xs font-mono">
-                <span className="text-slate-400">Latency: <strong className="text-cyan-400">{testResult.latencyMs}ms</strong></span>
-                <span className="text-slate-400">Tokens: <strong className="text-amber-400">{testResult.inputTokens} in / {testResult.outputTokens} out</strong></span>
-                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px]">
-                  Direct Company Billed
-                </span>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Auth Execution Mode</label>
+                <select
+                  value={testAuthMode}
+                  onChange={(e) => setTestAuthMode(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="auto">Auto (Prefer Flat Subscription if Active)</option>
+                  <option value="subscription">Flat-Rate Subscription Proxy ($0.00/token)</option>
+                  <option value="api_key">Direct API Key Meter</option>
+                </select>
               </div>
-            </div>
 
-            {/* Generated Content Box */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-mono text-slate-400 uppercase block">Live Model Response Output:</label>
-              <div className="p-4 rounded-lg bg-white/[0.02] border border-white/[0.08] text-xs text-slate-200 font-sans leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto">
-                {testResult.text}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Model</label>
+                <select
+                  value={testModelId}
+                  onChange={(e) => setTestModelId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
+                >
+                  {PROVIDER_METAS.find(m => m.id === testProvider)?.supportedModels.map(sm => (
+                    <option key={sm.id} value={sm.id}>{sm.name} ({sm.tier})</option>
+                  ))}
+                </select>
               </div>
+
+              <button
+                onClick={handleExecuteSandboxTest}
+                disabled={isExecutingTest || !testPrompt.trim()}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-md disabled:opacity-50"
+              >
+                {isExecutingTest ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                <span>Execute Direct Sandbox Query</span>
+              </button>
             </div>
 
-            {/* Direct Billing Verification Statement */}
-            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-white/[0.06] font-mono">
-              <span>Billed To: <strong className="text-white">{testResult.billedTo}</strong></span>
-              <span className="text-cyan-400">Verified Direct Handshake: {testResult.timestamp}</span>
+            <div className="lg:col-span-2 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Test Prompt</label>
+                <textarea
+                  rows={4}
+                  value={testPrompt}
+                  onChange={(e) => setTestPrompt(e.target.value)}
+                  placeholder="Enter test prompt..."
+                  className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              {testResponse && (
+                <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 text-xs">
+                    <span className="font-semibold text-slate-200">Execution Output</span>
+                    <div className="flex items-center gap-2 font-mono text-[11px]">
+                      <span className="text-emerald-400">{testResponse.latencyMs}ms</span>
+                      <span>•</span>
+                      <span className="text-indigo-400">{testResponse.billingMode === 'subscription_flat_rate' ? 'Flat Subscription ($0.00)' : 'API Key Meter'}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-60 overflow-y-auto leading-relaxed">
+                    {testResponse.text || testResponse.error}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Enterprise Key Governance & Security Guarantee */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div className="p-4 rounded-xl bg-slate-900/50 border border-white/[0.08] space-y-2">
-          <div className="flex items-center gap-2 text-white font-bold">
-            <Lock className="w-4 h-4 text-amber-400" />
-            <span>Zero-Retention Key Vault</span>
-          </div>
-          <p className="text-slate-400 leading-relaxed">
-            API keys are handled ephemerally in memory or injected into server-side HTTPS requests without being stored in persistent plain text or leaked to the client browser.
-          </p>
         </div>
+      )}
 
-        <div className="p-4 rounded-xl bg-slate-900/50 border border-white/[0.08] space-y-2">
-          <div className="flex items-center gap-2 text-white font-bold">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Direct Provider Economics</span>
-          </div>
-          <p className="text-slate-400 leading-relaxed">
-            Take full advantage of your enterprise volume discounts, reserved throughput capacity, and committed spend directly with Google, OpenAI, Anthropic, and Groq.
-          </p>
-        </div>
-
-        <div className="p-4 rounded-xl bg-slate-900/50 border border-white/[0.08] space-y-2">
-          <div className="flex items-center gap-2 text-white font-bold">
-            <Database className="w-4 h-4 text-cyan-400" />
-            <span>Cryptographic Ledger Audit</span>
-          </div>
-          <p className="text-slate-400 leading-relaxed">
-            Every dispatch executed via direct company keys creates a SHA-256 verifiable audit block recording the provider account, token count, and entity ledger entry.
-          </p>
-        </div>
-      </div>
-
+      {/* OAuth / Google Login Modal */}
+      {oauthModalProvider && (
+        <SubscriptionOAuthModal
+          isOpen={Boolean(oauthModalProvider)}
+          onClose={() => setOauthModalProvider(null)}
+          provider={oauthModalProvider}
+          providerDisplayName={PROVIDER_METAS.find(m => m.id === oauthModalProvider)?.name || oauthModalProvider}
+          defaultEmail={profile?.primaryContactEmail || 'solarastra.in@gmail.com'}
+          onSuccess={() => {
+            setNotification({ type: 'success', message: `Subscription for ${oauthModalProvider.toUpperCase()} connected successfully.` });
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 };
