@@ -25,7 +25,10 @@ import {
   Check,
   Clock,
   Eye,
-  EyeOff
+  EyeOff,
+  Building2,
+  Users,
+  UserPlus
 } from 'lucide-react';
 import { 
   auth, 
@@ -41,6 +44,7 @@ import {
   SmtpConfigFirestore
 } from '../lib/firebase';
 import { User } from 'firebase/auth';
+import { CompanyTeamOnboarding } from './CompanyTeamOnboarding';
 
 interface AdminConsoleProps {
   onNavigateTab: (tab: string) => void;
@@ -53,7 +57,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   persistenceMode,
   onTogglePersistenceMode,
 }) => {
-  const [activeTab, setActiveTab] = useState<'smtp' | 'auth' | 'firestore' | 'context_policy' | 'audit'>('smtp');
+  const [activeTab, setActiveTab] = useState<'smtp' | 'onboarding' | 'auth' | 'firestore' | 'context_policy' | 'audit'>('smtp');
   
   // Firebase Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -553,6 +557,21 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('onboarding')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            activeTab === 'onboarding'
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+          }`}
+        >
+          <Building2 className="w-4 h-4 text-purple-400" />
+          <span>Company & Team Onboarding</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-purple-500/20 text-purple-300 border border-purple-400/30 uppercase">
+            SuperAdmin
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('auth')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
             activeTab === 'auth'
@@ -1001,7 +1020,15 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
         </div>
       )}
 
-      {/* ==================== TAB 2: GOOGLE AUTH & ACCESS CONTROL ==================== */}
+      {/* ==================== TAB 2: SUPERADMIN COMPANY & TEAM ONBOARDING ==================== */}
+      {activeTab === 'onboarding' && (
+        <CompanyTeamOnboarding 
+          currentUser={currentUser} 
+          onNavigateTab={onNavigateTab} 
+        />
+      )}
+
+      {/* ==================== TAB 3: GOOGLE AUTH & ACCESS CONTROL ==================== */}
       {activeTab === 'auth' && (
         <div className="space-y-6">
           <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-6">
@@ -1121,7 +1148,21 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
             </div>
 
             {/* Collection Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-purple-500/30 space-y-1">
+                <div className="text-[11px] font-mono text-purple-400">Collection</div>
+                <div className="font-bold text-white text-sm font-mono">/companies</div>
+                <div className="text-xs text-slate-300">Corporate tenants, billing quotas & allowed model matrices</div>
+                <div className="pt-2 text-[10px] text-purple-400 font-mono">SuperAdmin Managed</div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-indigo-500/30 space-y-1">
+                <div className="text-[11px] font-mono text-indigo-400">Collection</div>
+                <div className="font-bold text-white text-sm font-mono">/teams</div>
+                <div className="text-xs text-slate-300">Department workspaces, lead policies & member access tokens</div>
+                <div className="pt-2 text-[10px] text-indigo-400 font-mono">Granular Tiers Active</div>
+              </div>
+
               <div className="p-4 rounded-xl bg-slate-950/60 border border-white/10 space-y-1">
                 <div className="text-[11px] font-mono text-slate-400">Collection</div>
                 <div className="font-bold text-white text-sm font-mono">/credentials</div>

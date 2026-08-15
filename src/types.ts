@@ -245,7 +245,7 @@ export interface MarketComparisonItem {
   whyOrAdvantage: string;
 }
 
-export type AuthMethodType = 'api_key' | 'subscription_oauth' | 'subscription_email' | 'cli_daemon' | 'unified_gateway';
+export type AuthMethodType = 'api_key' | 'local_proxy' | 'both' | 'subscription_oauth' | 'subscription_email' | 'cli_daemon' | 'unified_gateway';
 
 export interface CompanyProviderCredential {
   provider: AIProvider;

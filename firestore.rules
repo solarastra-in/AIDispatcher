@@ -36,5 +36,15 @@ service cloud.firestore {
     match /audit_logs/{logId} {
       allow read, write: if true;
     }
+
+    // Onboarded Companies
+    match /companies/{companyId} {
+      allow read, write: if true;
+    }
+
+    // Onboarded Teams & Access Control Policies
+    match /teams/{teamId} {
+      allow read, write: if true;
+    }
   }
 }

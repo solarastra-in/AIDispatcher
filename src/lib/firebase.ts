@@ -298,3 +298,125 @@ export async function loadAuditLogsFromFirestore(limitCount: number = 50): Promi
     return [];
   }
 }
+
+// 7. Companies & Enterprise Onboarding Persistence
+export interface CompanyFirestore {
+  id: string;
+  name: string;
+  domain: string;
+  industry: string;
+  tier: 'enterprise' | 'growth' | 'startup' | 'gov_defense';
+  billingEmail: string;
+  monthlyTokenQuota: number;
+  monthlyTokensUsed: number;
+  monthlyBudgetUsd: number;
+  allowedModels: string[];
+  routingPriority: 'subscription_first' | 'byok_first' | 'balanced' | 'latency_optimized';
+  smtpAlertsEnabled: boolean;
+  superAdminEmail: string;
+  status: 'active' | 'paused' | 'suspended';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function saveCompanyToFirestore(company: CompanyFirestore): Promise<void> {
+  try {
+    const compRef = doc(db, 'companies', company.id);
+    await setDoc(compRef, {
+      ...company,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.error('Error saving company to Firestore:', err);
+    throw err;
+  }
+}
+
+export async function loadCompaniesFromFirestore(): Promise<CompanyFirestore[]> {
+  try {
+    const q = query(collection(db, 'companies'), orderBy('createdAt', 'desc'), limit(50));
+    const snap = await getDocs(q);
+    const comps: CompanyFirestore[] = [];
+    snap.forEach((d) => comps.push(d.data() as CompanyFirestore));
+    return comps;
+  } catch (err) {
+    console.error('Error loading companies from Firestore:', err);
+    return [];
+  }
+}
+
+export async function deleteCompanyFromFirestore(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'companies', id));
+  } catch (err) {
+    console.error('Error deleting company from Firestore:', err);
+    throw err;
+  }
+}
+
+// 8. Teams & Granular Access Controls Persistence
+export interface TeamFirestore {
+  id: string;
+  companyId: string;
+  companyName: string;
+  name: string;
+  leadEmail: string;
+  tierCap: string;
+  monthlyTokenQuota: number;
+  monthlyTokensUsed: number;
+  monthlyBudgetUsd: number;
+  allowedModels: string[];
+  members: Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    tierCap: string;
+    monthlyTokenQuota: number;
+    monthlyTokensUsed: number;
+    joinedAt: string;
+    status: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function saveTeamToFirestore(team: TeamFirestore): Promise<void> {
+  try {
+    const teamRef = doc(db, 'teams', team.id);
+    await setDoc(teamRef, {
+      ...team,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.error('Error saving team to Firestore:', err);
+    throw err;
+  }
+}
+
+export async function loadTeamsFromFirestore(companyId?: string): Promise<TeamFirestore[]> {
+  try {
+    const q = query(collection(db, 'teams'), orderBy('createdAt', 'desc'), limit(50));
+    const snap = await getDocs(q);
+    const teams: TeamFirestore[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as TeamFirestore;
+      if (!companyId || data.companyId === companyId) {
+        teams.push(data);
+      }
+    });
+    return teams;
+  } catch (err) {
+    console.error('Error loading teams from Firestore:', err);
+    return [];
+  }
+}
+
+export async function deleteTeamFromFirestore(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'teams', id));
+  } catch (err) {
+    console.error('Error deleting team from Firestore:', err);
+    throw err;
+  }
+}

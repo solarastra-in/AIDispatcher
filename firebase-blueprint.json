@@ -97,10 +97,49 @@
       "fields": {
         "id": { "type": "string", "description": "Audit ID" },
         "action": { "type": "string", "description": "Action performed" },
-        "category": { "type": "string", "description": "security, credentials, smtp, dispatch" },
+        "category": { "type": "string", "description": "security, credentials, smtp, dispatch, onboarding" },
         "actor": { "type": "string", "description": "User email or system" },
         "details": { "type": "string", "description": "Summary of change" },
         "timestamp": { "type": "string", "description": "Event timestamp" }
+      }
+    },
+    "Company": {
+      "collection": "companies",
+      "fields": {
+        "id": { "type": "string", "description": "Company Unique ID" },
+        "name": { "type": "string", "description": "Company Legal Name" },
+        "domain": { "type": "string", "description": "Corporate email domain (e.g. solarastra.in)" },
+        "industry": { "type": "string", "description": "Industry domain" },
+        "tier": { "type": "string", "description": "Subscription tier: enterprise, growth, startup" },
+        "billingEmail": { "type": "string", "description": "Primary billing and alert email" },
+        "monthlyTokenQuota": { "type": "number", "description": "Monthly token allocation" },
+        "monthlyTokensUsed": { "type": "number", "description": "Consumed tokens in current cycle" },
+        "monthlyBudgetUsd": { "type": "number", "description": "Monthly spend cap in USD" },
+        "allowedModels": { "type": "array", "description": "Array of allowed model IDs" },
+        "routingPriority": { "type": "string", "description": "subscription_first, byok_first, balanced" },
+        "smtpAlertsEnabled": { "type": "boolean", "description": "Whether SMTP notifications are active" },
+        "superAdminEmail": { "type": "string", "description": "Super admin who onboarded the company" },
+        "status": { "type": "string", "description": "active, paused, suspended" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      }
+    },
+    "Team": {
+      "collection": "teams",
+      "fields": {
+        "id": { "type": "string", "description": "Team identifier" },
+        "companyId": { "type": "string", "description": "Parent company reference ID" },
+        "companyName": { "type": "string", "description": "Parent company name" },
+        "name": { "type": "string", "description": "Department or team name" },
+        "leadEmail": { "type": "string", "description": "Team lead email" },
+        "tierCap": { "type": "string", "description": "Maximum allowed model tier (frontier, mid, economy)" },
+        "monthlyTokenQuota": { "type": "number", "description": "Team monthly token quota" },
+        "monthlyTokensUsed": { "type": "number", "description": "Team consumed tokens" },
+        "monthlyBudgetUsd": { "type": "number", "description": "Team budget in USD" },
+        "allowedModels": { "type": "array", "description": "Allowlisted model IDs for this team" },
+        "members": { "type": "array", "description": "List of team member objects with email, role, token cap" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
       }
     }
   }
