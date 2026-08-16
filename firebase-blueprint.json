@@ -141,6 +141,21 @@
         "createdAt": { "type": "string", "description": "Creation timestamp" },
         "updatedAt": { "type": "string", "description": "Update timestamp" }
       }
+    },
+    "EmailTemplate": {
+      "collection": "email_templates",
+      "fields": {
+        "id": { "type": "string", "description": "Template identifier: billing_budget_warning, billing_invoice, system_failover, system_security_audit, onboarding_invite, test_verification" },
+        "name": { "type": "string", "description": "Template Display Name" },
+        "category": { "type": "string", "description": "billing, system, security, onboarding, verification" },
+        "subject": { "type": "string", "description": "Customizable email subject with template variables" },
+        "htmlBody": { "type": "string", "description": "Customizable responsive HTML email body template" },
+        "textBody": { "type": "string", "description": "Plain text fallback email body" },
+        "description": { "type": "string", "description": "Brief description of when this notification fires" },
+        "variables": { "type": "array", "description": "Supported placeholder tokens for variable interpolation" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" },
+        "updatedBy": { "type": "string", "description": "SuperAdmin email who updated the template" }
+      }
     }
   }
 }

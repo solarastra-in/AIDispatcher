@@ -31,7 +31,7 @@ export interface PlatformAssistantConfig {
 // (companyProfile, etc.). Swap for a real settings table once Firestore is wired in.
 let platformAssistantConfig: PlatformAssistantConfig = {
   provider: "google",
-  modelId: "gemini-2.5-flash", // cheapest catalog-verified model as a sensible default; admin can change
+  modelId: "gemini-3.7-flash", // primary fast model as a sensible default; admin can change
   useLocalProxyIfAvailable: false,
   maxUtilityTokens: 400,
   updatedByAdminId: "system_default",

@@ -46,5 +46,10 @@ service cloud.firestore {
     match /teams/{teamId} {
       allow read, write: if true;
     }
+
+    // Email & Alert Notification Templates (HTML/Text)
+    match /email_templates/{templateId} {
+      allow read, write: if true;
+    }
   }
 }

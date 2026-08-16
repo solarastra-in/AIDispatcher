@@ -130,6 +130,29 @@ export interface ContextLedgerEntry {
   contextSizeReductionPct?: number;
 }
 
+export interface FailedAttemptInfo {
+  modelId: string;
+  modelName: string;
+  provider: AIProvider;
+  tier: ModelTier;
+  error: string;
+  thompsonScore: number;
+  expectedQuality: number;
+  timestamp: string;
+}
+
+export interface AutoRetryInfo {
+  triggered: boolean;
+  retryAttempts: number;
+  maxRetriesAllowed: number;
+  originalModel: AIModel;
+  failedAttempts: FailedAttemptInfo[];
+  selectedNextBestModel: AIModel;
+  fallbackReason: string;
+  thompsonSamplingRank: number;
+  totalCandidatePoolSize: number;
+}
+
 export interface DispatchRequest {
   prompt: string;
   sessionId?: string;
@@ -140,6 +163,10 @@ export interface DispatchRequest {
   contextLedgerIds?: string[];
   byokKey?: string;
   enableAllOptimizations?: boolean;
+  enableSmartAutoRetry?: boolean;
+  simulateFailure?: boolean;
+  simulateFailureModelId?: string;
+  maxAutoRetries?: number;
 }
 
 export interface DispatchResponse {
@@ -166,6 +193,27 @@ export interface DispatchResponse {
   candidateEvaluations?: CandidateEvaluation[];
   executionStatus: 'success' | 'fallback_used' | 'error';
   errorMessage?: string;
+  autoRetryInfo?: AutoRetryInfo;
+}
+
+export interface AttachedPromptFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  modality: 'vision' | 'document' | 'audio' | 'video' | 'code' | 'other';
+  base64?: string;
+  textPreview?: string;
+  uploadedAt: string;
+}
+
+export interface ExcludedModelReason {
+  modelId: string;
+  modelName: string;
+  provider: string;
+  tier: ModelTier;
+  category: 'modality_unsupported' | 'admin_policy_enforced' | 'unconfigured_key' | 'budget_exhausted' | 'tier_restricted';
+  reason: string;
 }
 
 export interface UserPersona {
@@ -179,8 +227,13 @@ export interface UserPersona {
   teamId?: string;
   monthlyBudgetUsd: number;
   currentSpendUsd: number;
+  monthlyTokenQuota?: number;
   tokensUsedThisMonth: number;
   allowedTiers: ModelTier[];
+  allowedModels?: string[]; // Specific model whitelist if enforced by admin
+  canSelectModel?: boolean; // Privilege to manually select AI model
+  canSelectEngine?: boolean; // Privilege to manually select AI engine
+  isCompanyAdmin?: boolean; // Whether the user is an admin of their company
   canBYOK: boolean;
   canManageTeam: boolean;
   canManagePlatform: boolean;
@@ -194,19 +247,31 @@ export interface TeamMember {
   tierCap: ModelTier;
   monthlyTokenQuota: number;
   monthlyTokensUsed: number;
+  monthlyBudgetUsd?: number;
+  currentSpendUsd?: number;
+  canSelectModel?: boolean;
+  canSelectEngine?: boolean;
+  canBYOK?: boolean;
+  allowedModels?: string[];
   joinedAt: string;
   status: 'active' | 'invited' | 'suspended';
 }
 
 export interface TeamAccount {
   id: string;
+  companyId?: string;
   name: string;
   tierPlan: 'Growth' | 'Enterprise' | 'Scale';
   adminEmail: string;
+  companyAdminEmail?: string;
+  ssoDomain?: string;
+  ssoEnabled?: boolean;
   allowedProviders: AIProvider[];
+  allowedModels?: string[];
   defaultTierCap: ModelTier;
   monthlyBudgetUsd: number;
   currentMonthSpendUsd: number;
+  monthlyTokenQuota?: number;
   totalTokensProcessed: number;
   members: TeamMember[];
 }

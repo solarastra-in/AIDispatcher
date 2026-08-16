@@ -166,4 +166,128 @@ export class ThompsonDecisionEngine {
       candidates,
     };
   }
+
+  /**
+   * Evaluates all candidates and returns them sorted by Thompson-sampling suitability:
+   * 1. Passing quality threshold (sorted by cost ascending, tiebreak by sampledQuality descending)
+   * 2. Non-passing (sorted by sampledQuality descending)
+   */
+  public rankCandidatesByThompsonScore(
+    models: AIModel[],
+    taskDistribution: TaskProbabilityDistribution,
+    allowedTiers: ModelTier[],
+    qualityThreshold = 0.72,
+    estimatedInputTokens = 500,
+    estimatedOutputTokens = 300,
+    excludeModelIds: string[] = []
+  ): ModelCandidateDecision[] {
+    const activeModels = models.filter(m => m.status === 'active' && !excludeModelIds.includes(m.id));
+    const primaryArch = TASK_ARCHETYPES[taskDistribution.primaryArchetype];
+    const reqCapabilities = primaryArch.requiredCapabilities;
+
+    const evaluated: ModelCandidateDecision[] = activeModels.map((model) => {
+      const qEstimate = this.qualityTracker.estimateQuality(model, taskDistribution.probabilities);
+      const estCost = (estimatedInputTokens / 1_000_000 * model.inputPricePerM) + 
+                       (estimatedOutputTokens / 1_000_000 * model.outputPricePerM);
+
+      let isEligible = true;
+      let disqualificationReason: string | undefined = undefined;
+
+      if (!allowedTiers.includes(model.tier)) {
+        isEligible = false;
+        disqualificationReason = `Tier '${model.tierLabel}' not allowed for active persona`;
+      } else if (reqCapabilities.includes('code') && !model.capabilities.code) {
+        isEligible = false;
+        disqualificationReason = 'Lacks code generation capability';
+      } else if (reqCapabilities.includes('reasoning') && !model.capabilities.reasoning && model.tier === 'low') {
+        isEligible = false;
+        disqualificationReason = 'Low-tier model lacks multi-step reasoning';
+      }
+
+      const clearedQualityBar = isEligible && (qEstimate.sampledQuality >= qualityThreshold);
+
+      return {
+        model,
+        qualityEstimate: qEstimate,
+        estimatedCostUsd: Number(estCost.toFixed(7)),
+        isEligible,
+        clearedQualityBar,
+        disqualificationReason: isEligible ? undefined : disqualificationReason,
+        isWinner: false,
+      };
+    });
+
+    const eligible = evaluated.filter(c => c.isEligible);
+    const passing = eligible.filter(c => c.clearedQualityBar);
+    const nonPassing = eligible.filter(c => !c.clearedQualityBar);
+
+    passing.sort((a, b) => {
+      if (Math.abs(a.estimatedCostUsd - b.estimatedCostUsd) > 0.0000001) {
+        return a.estimatedCostUsd - b.estimatedCostUsd;
+      }
+      return b.qualityEstimate.sampledQuality - a.qualityEstimate.sampledQuality;
+    });
+
+    nonPassing.sort((a, b) => b.qualityEstimate.sampledQuality - a.qualityEstimate.sampledQuality);
+
+    return [...passing, ...nonPassing];
+  }
+
+  /**
+   * Selects the Next-Best Alternative Model excluding previously failed models.
+   */
+  public selectNextBestAlternative(
+    models: AIModel[],
+    taskDistribution: TaskProbabilityDistribution,
+    allowedTiers: ModelTier[],
+    excludeModelIds: string[],
+    qualityThreshold = 0.72,
+    estimatedInputTokens = 500,
+    estimatedOutputTokens = 300
+  ): {
+    nextModel: AIModel | null;
+    candidateDecision: ModelCandidateDecision | null;
+    rankedAlternatives: ModelCandidateDecision[];
+    reason: string;
+    thompsonSamplingRank: number;
+  } {
+    const ranked = this.rankCandidatesByThompsonScore(
+      models,
+      taskDistribution,
+      allowedTiers,
+      qualityThreshold,
+      estimatedInputTokens,
+      estimatedOutputTokens,
+      excludeModelIds
+    );
+
+    if (ranked.length === 0) {
+      // Fallback to any active model not in exclude list
+      const fallbackModel = models.find(m => m.status === 'active' && !excludeModelIds.includes(m.id)) || null;
+      return {
+        nextModel: fallbackModel,
+        candidateDecision: null,
+        rankedAlternatives: [],
+        reason: 'All filtered candidates exhausted; selected fallback from remaining pool.',
+        thompsonSamplingRank: 999,
+      };
+    }
+
+    const winner = ranked[0];
+    winner.isWinner = true;
+
+    const sampleVal = winner.qualityEstimate.sampledQuality.toFixed(2);
+    const meanVal = winner.qualityEstimate.expectedQuality.toFixed(2);
+    const costPerCall = (winner.estimatedCostUsd * 1000).toFixed(4);
+
+    const reason = `Smart Auto-Retry selected '${winner.model.name}' as the #1 ranked alternative by Thompson sampling (Sampled Quality: ${sampleVal}, Posterior Mean: ${meanVal}, Est Cost: $${costPerCall}/1k).`;
+
+    return {
+      nextModel: winner.model,
+      candidateDecision: winner,
+      rankedAlternatives: ranked,
+      reason,
+      thompsonSamplingRank: 1,
+    };
+  }
 }

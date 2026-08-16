@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserPersona, UserRole } from '../types';
 import { PERSONA_PROFILES } from '../data/mockData';
 import { 
@@ -16,8 +16,13 @@ import {
   Code2,
   Activity,
   BarChart3,
-  KeyRound
+  KeyRound,
+  LogIn,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
+import { auth, signInWithGoogle, signOutUser, onAuthChanged } from '../lib/firebase';
+import { User } from 'firebase/auth';
 
 interface NavbarProps {
   currentTab: string;
@@ -36,7 +41,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenApiExplorer,
   onOpenQualityInspector,
 }) => {
-  const [personaMenuOpen, setPersonaMenuOpen] = React.useState(false);
+  const [personaMenuOpen, setPersonaMenuOpen] = useState(false);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthChanged((u) => {
+      setFirebaseUser(u);
+    });
+    return () => unsub();
+  }, []);
+
+  // Admin Console is strictly accessible ONLY to solarastra.in@gmail.com
+  const isSuperAdmin = (firebaseUser?.email === 'solarastra.in@gmail.com') || (activePersona.email === 'solarastra.in@gmail.com');
 
   const navItems = [
     { id: 'dispatch', label: 'Dispatch Console', icon: Cpu },
@@ -48,16 +65,36 @@ export const Navbar: React.FC<NavbarProps> = ({
       id: 'teams', 
       label: 'Team & Governance', 
       icon: Users,
-      badge: activePersona.role === 'team_admin' ? 'Admin' : undefined
+      badge: activePersona.role === 'team_admin' || activePersona.isCompanyAdmin ? 'Admin' : undefined
     },
-    { 
+    // Admin Console is ONLY visible after the user is authenticated as solarastra.in@gmail.com
+    ...(isSuperAdmin ? [{ 
       id: 'admin', 
       label: 'Admin Console', 
       icon: ShieldCheck,
-      badge: 'SMTP & Auth'
-    },
+      badge: 'SuperAdmin'
+    }] : []),
     { id: 'research', label: 'Market Architecture', icon: BookOpen },
   ];
+
+  const handleGoogleAuth = async () => {
+    setIsSigningIn(true);
+    try {
+      if (firebaseUser) {
+        await signOutUser();
+      } else {
+        const { user } = await signInWithGoogle();
+        if (user.email === 'solarastra.in@gmail.com') {
+          const superPersona = PERSONA_PROFILES.find(p => p.email === 'solarastra.in@gmail.com');
+          if (superPersona) setActivePersona(superPersona);
+        }
+      }
+    } catch (err) {
+      console.warn('Google auth notification:', err);
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
 
   return (
     <nav className="sticky top-0 z-50 bg-slate-950/40 backdrop-blur-2xl border-b border-white/[0.08] shadow-lg shadow-black/20">
@@ -142,6 +179,36 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Beta(α,β)</span>
               </button>
             )}
+
+            {/* Google Identity & SuperAdmin Status Button */}
+            <button
+              id="google-auth-trigger-btn"
+              onClick={handleGoogleAuth}
+              disabled={isSigningIn}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono backdrop-blur-md transition-all cursor-pointer border ${
+                firebaseUser?.email === 'solarastra.in@gmail.com' || activePersona.email === 'solarastra.in@gmail.com'
+                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/30 hover:bg-emerald-500/20'
+                  : firebaseUser
+                  ? 'bg-blue-500/10 text-blue-300 border-blue-400/30 hover:bg-blue-500/20'
+                  : 'bg-white/[0.05] text-slate-300 border-white/10 hover:bg-white/[0.1]'
+              }`}
+              title={firebaseUser ? `Authenticated as ${firebaseUser.email}` : "Sign in with Google"}
+            >
+              {firebaseUser ? (
+                <>
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="truncate max-w-[90px]">{firebaseUser.displayName || firebaseUser.email?.split('@')[0]}</span>
+                  {firebaseUser.email === 'solarastra.in@gmail.com' && (
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-400/20 text-emerald-300 font-bold">Admin</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Google SSO</span>
+                </>
+              )}
+            </button>
 
             {/* Persona Switcher */}
             <div className="relative">

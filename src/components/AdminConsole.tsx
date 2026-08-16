@@ -29,7 +29,10 @@ import {
   EyeOff,
   Building2,
   Users,
-  UserPlus
+  UserPlus,
+  Layers,
+  Palette,
+  FileCode2
 } from 'lucide-react';
 import { 
   auth, 
@@ -46,6 +49,7 @@ import {
 } from '../lib/firebase';
 import { User } from 'firebase/auth';
 import { CompanyTeamOnboarding } from './CompanyTeamOnboarding';
+import { EmailTemplateEditor } from './EmailTemplateEditor';
 
 interface AdminConsoleProps {
   onNavigateTab: (tab: string) => void;
@@ -58,7 +62,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   persistenceMode,
   onTogglePersistenceMode,
 }) => {
-  const [activeTab, setActiveTab] = useState<'smtp' | 'onboarding' | 'auth' | 'firestore' | 'context_policy' | 'audit'>('smtp');
+  const [activeTab, setActiveTab] = useState<'smtp' | 'templates' | 'onboarding' | 'auth' | 'firestore' | 'context_policy' | 'audit'>('smtp');
   
   // Firebase Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -676,6 +680,21 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('templates')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            activeTab === 'templates'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+          }`}
+        >
+          <FileCode2 className="w-4 h-4 text-indigo-400" />
+          <span>Email & Alert Templates</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+            HTML/Text
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('onboarding')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
             activeTab === 'onboarding'
@@ -769,10 +788,38 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
 
       {/* ==================== TAB 1: SMTP EMAIL SETTINGS ==================== */}
       {activeTab === 'smtp' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Main SMTP Form */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-5">
+        <div className="space-y-6">
+          {/* Email Template Quick Switch Banner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-slate-900/60 border border-indigo-500/20 backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                <FileCode2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                  <span>Customizable Alert & Notification Templates</span>
+                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                    Live HTML / Plaintext Editor
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  SuperAdmin can customize HTML bodies, variables, and brand typography for billing alerts, failover notices, and trial validations.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('templates')}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all shrink-0 cursor-pointer"
+            >
+              <Palette className="w-3.5 h-3.5" />
+              <span>Open Template Editor</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Main SMTP Form */}
+            <div className="lg:col-span-7 space-y-6">
+              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-5">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1220,9 +1267,25 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
             </div>
           </div>
         </div>
+        </div>
       )}
 
-      {/* ==================== TAB 2: SUPERADMIN COMPANY & TEAM ONBOARDING ==================== */}
+      {/* ==================== TAB 2: EMAIL & ALERT TEMPLATES EDITOR ==================== */}
+      {activeTab === 'templates' && (
+        <EmailTemplateEditor
+          currentUserEmail={currentUser?.email || 'solarastra.in@gmail.com'}
+          smtpConfig={{
+            host: smtpHost,
+            port: smtpPort,
+            user: smtpUser,
+            fromEmail: smtpFromEmail,
+            fromName: smtpFromName,
+            isVerified: isVerified,
+          }}
+        />
+      )}
+
+      {/* ==================== TAB 3: SUPERADMIN COMPANY & TEAM ONBOARDING ==================== */}
       {activeTab === 'onboarding' && (
         <CompanyTeamOnboarding 
           currentUser={currentUser} 

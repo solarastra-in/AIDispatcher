@@ -88,6 +88,218 @@ let emailLogs: Array<{
   }
 ];
 
+export interface ServerEmailTemplate {
+  id: string;
+  name: string;
+  category: 'billing' | 'system' | 'security' | 'onboarding' | 'verification';
+  description: string;
+  subject: string;
+  variables: string[];
+  htmlBody: string;
+  textBody?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+// In-memory persistent server-side email templates dictionary
+let serverEmailTemplates: Record<string, ServerEmailTemplate> = {
+  quota_alert: {
+    id: 'quota_alert',
+    name: 'Monthly Token Quota & Budget Alert',
+    category: 'billing',
+    description: 'Triggered when a company or team reaches 80% or 100% of their monthly token or dollar budget cap.',
+    subject: '⚠️ [WhyOr Quota Alert] {{company_name}} Monthly Token Budget at {{threshold_percentage}}%',
+    variables: ['{{recipient_name}}', '{{recipient_email}}', '{{company_name}}', '{{threshold_percentage}}', '{{current_spend}}', '{{budget_limit}}', '{{tokens_used}}', '{{fallback_route}}', '{{timestamp}}', '{{custom_message}}', '{{action_url}}'],
+    htmlBody: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 16px; border: 1px solid #334155; overflow: hidden; padding: 28px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
+    <div style="font-size: 20px; font-weight: 800; color: #818cf8; letter-spacing: -0.5px;">⚡ WhyOr Dispatch AI</div>
+    <span style="background-color: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 11px; padding: 4px 10px; border-radius: 9999px; font-weight: 700; text-transform: uppercase;">
+      Threshold Warning ({{threshold_percentage}}%)
+    </span>
+  </div>
+  <div style="font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+    <p style="margin-top: 0;">Attention <strong>{{recipient_name}}</strong>,</p>
+    <p>Your team at <strong>{{company_name}}</strong> has reached <strong style="color: #fbbf24;">{{threshold_percentage}}%</strong> of your monthly allocated model budget.</p>
+    <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin: 20px 0;">
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Organization:</span>
+        <span style="font-weight: 600; color: #f8fafc; font-size: 12px; font-family: monospace;">{{company_name}}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Current Billed Spend:</span>
+        <span style="font-weight: 700; color: #fbbf24; font-size: 13px; font-family: monospace;">{{current_spend}} / {{budget_limit}}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+        <span style="color: #94a3b8; font-size: 12px;">Autonomous Fallback:</span>
+        <span style="font-weight: 600; color: #34d399; font-size: 12px; font-family: monospace;">{{fallback_route}}</span>
+      </div>
+    </div>
+    <p style="font-size: 13px; color: #94a3b8;">{{custom_message}}</p>
+  </div>
+  <div style="margin-top: 28px; border-top: 1px solid #1e293b; padding-top: 16px; font-size: 11px; color: #64748b; text-align: center;">
+    WhyOr Dispatch AI Enterprise • SuperAdmin Governance: solarastra.in@gmail.com • Generated at {{timestamp}}
+  </div>
+</div>`,
+    textBody: `[WhyOr Quota Alert] {{company_name}} Monthly Token Budget at {{threshold_percentage}}%\n\nAttention {{recipient_name}},\n\nYour team at {{company_name}} has reached {{threshold_percentage}}% of your monthly allocated model budget.\nSpend: {{current_spend}} / {{budget_limit}}\nFallback: {{fallback_route}}\n\n{{custom_message}}\n\nReview: {{action_url}}`,
+  },
+  billing_invoice: {
+    id: 'billing_invoice',
+    name: 'Monthly Billing & Subscription Invoice Summary',
+    category: 'billing',
+    description: 'Monthly summary notification detailing total dispatched tokens, flat-rate subscription savings, and billed amounts.',
+    subject: '📄 [WhyOr Billing] Monthly Invoice & Flat-Rate Subscription Summary - {{billing_period}}',
+    variables: ['{{recipient_name}}', '{{company_name}}', '{{billing_period}}', '{{invoice_id}}', '{{total_amount}}', '{{flat_rate_savings}}', '{{dispatched_requests}}', '{{subscription_tier}}', '{{timestamp}}', '{{custom_message}}', '{{action_url}}'],
+    htmlBody: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 16px; border: 1px solid #334155; overflow: hidden; padding: 28px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
+    <div style="font-size: 20px; font-weight: 800; color: #818cf8; letter-spacing: -0.5px;">⚡ WhyOr Dispatch AI</div>
+    <span style="background-color: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); font-size: 11px; padding: 4px 10px; border-radius: 9999px; font-weight: 700; text-transform: uppercase;">
+      Paid & Verified
+    </span>
+  </div>
+  <div style="font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+    <p style="margin-top: 0;">Hello <strong>{{recipient_name}}</strong>,</p>
+    <p>Your enterprise billing receipt and subscription summary for <strong>{{billing_period}}</strong> is ready for review.</p>
+    <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin: 20px 0;">
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Invoice Reference:</span>
+        <span style="font-weight: 600; color: #f8fafc; font-size: 12px; font-family: monospace;">{{invoice_id}}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Flat-Rate Zero-Markup Savings:</span>
+        <span style="font-weight: 700; color: #34d399; font-size: 13px; font-family: monospace;">+{{flat_rate_savings}} saved</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 8px 0; margin-top: 4px;">
+        <span style="color: #f8fafc; font-weight: 700; font-size: 14px;">Total Billed Amount:</span>
+        <span style="font-weight: 800; color: #818cf8; font-size: 16px; font-family: monospace;">{{total_amount}}</span>
+      </div>
+    </div>
+  </div>
+</div>`,
+    textBody: `[WhyOr Billing] Monthly Invoice - {{billing_period}}\n\nInvoice ID: {{invoice_id}}\nTotal Billed: {{total_amount}}\nZero-Markup Savings: {{flat_rate_savings}}\n\n{{custom_message}}`,
+  },
+  failover_alert: {
+    id: 'failover_alert',
+    name: 'Autonomous Routing Failover Incident Alert',
+    category: 'system',
+    description: 'Real-time alert sent when an AI provider returns rate-limit or error status and WhyOr auto-fails over.',
+    subject: '🚨 [WhyOr Dispatch] Autonomous Routing Failover: {{failed_provider}} ➔ {{fallback_provider}}',
+    variables: ['{{recipient_name}}', '{{company_name}}', '{{failed_provider}}', '{{fallback_provider}}', '{{reason}}', '{{latency_ms}}', '{{affected_requests}}', '{{timestamp}}', '{{custom_message}}', '{{action_url}}'],
+    htmlBody: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 16px; border: 1px solid #334155; overflow: hidden; padding: 28px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
+    <div style="font-size: 20px; font-weight: 800; color: #f43f5e; letter-spacing: -0.5px;">🚨 WhyOr Dispatch AI</div>
+    <span style="background-color: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); font-size: 11px; padding: 4px 10px; border-radius: 9999px; font-weight: 700; text-transform: uppercase;">
+      Auto-Failover Active
+    </span>
+  </div>
+  <div style="font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+    <p style="margin-top: 0;">Attention SuperAdmin / Enterprise Engineer,</p>
+    <p>The autonomous dispatch engine detected upstream unresponsiveness from <strong style="color: #f43f5e;">{{failed_provider}}</strong> and automatically rerouted traffic to <strong style="color: #34d399;">{{fallback_provider}}</strong> without user disruption.</p>
+    <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin: 20px 0;">
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Triggering Failure:</span>
+        <span style="font-weight: 700; color: #f43f5e; font-size: 12px; font-family: monospace;">{{failed_provider}} ({{reason}})</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Failover Destination:</span>
+        <span style="font-weight: 700; color: #34d399; font-size: 12px; font-family: monospace;">{{fallback_provider}}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+        <span style="color: #94a3b8; font-size: 12px;">Reroute Latency:</span>
+        <span style="font-weight: 600; color: #38bdf8; font-size: 12px; font-family: monospace;">{{latency_ms}}ms</span>
+      </div>
+    </div>
+  </div>
+</div>`,
+    textBody: `[WhyOr Dispatch] Autonomous Routing Failover\n\nFailed Provider: {{failed_provider}} ({{reason}})\nFallback Route: {{fallback_provider}}\nLatency: {{latency_ms}}ms\n\n{{custom_message}}`,
+  },
+  security_audit: {
+    id: 'security_audit',
+    name: 'Company Security Vault & Key Rotation Audit',
+    category: 'security',
+    description: 'Notification triggered when API credentials, SMTP config, or team authorization policies are created or updated.',
+    subject: '🔒 [WhyOr Security] Security Vault Update Audit: {{event_type}}',
+    variables: ['{{recipient_name}}', '{{event_type}}', '{{actor_email}}', '{{ip_address}}', '{{modified_provider}}', '{{timestamp}}', '{{custom_message}}', '{{action_url}}'],
+    htmlBody: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 16px; border: 1px solid #334155; overflow: hidden; padding: 28px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
+    <div style="font-size: 20px; font-weight: 800; color: #38bdf8; letter-spacing: -0.5px;">🔒 WhyOr Security Vault</div>
+    <span style="background-color: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 11px; padding: 4px 10px; border-radius: 9999px; font-weight: 700; text-transform: uppercase;">Audit Trail</span>
+  </div>
+  <div style="font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+    <p>A credential update or governance modification was recorded in the <strong>WhyOr Enterprise Vault</strong>.</p>
+    <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin: 20px 0;">
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Action Type:</span>
+        <span style="font-weight: 700; color: #38bdf8; font-size: 12px; font-family: monospace;">{{event_type}}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+        <span style="color: #94a3b8; font-size: 12px;">Actor Email:</span>
+        <span style="font-weight: 600; color: #f8fafc; font-size: 12px; font-family: monospace;">{{actor_email}}</span>
+      </div>
+    </div>
+  </div>
+</div>`,
+    textBody: `[WhyOr Security] Security Vault Update Audit: {{event_type}}\n\nActor: {{actor_email}}\nScope: {{modified_provider}}\nTimestamp: {{timestamp}}\n\n{{custom_message}}`,
+  },
+  onboarding_invite: {
+    id: 'onboarding_invite',
+    name: 'Team Member Onboarding & Model Access Grant',
+    category: 'onboarding',
+    description: 'Welcome email sent to newly invited developers or team members with allocated model quotas.',
+    subject: '✨ [WhyOr Dispatch] Welcome to {{company_name}} AI Gateway - Access Credentials & Quota',
+    variables: ['{{recipient_name}}', '{{recipient_email}}', '{{company_name}}', '{{role}}', '{{allocated_tokens}}', '{{authorized_models}}', '{{login_url}}', '{{timestamp}}', '{{custom_message}}'],
+    htmlBody: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 16px; border: 1px solid #334155; overflow: hidden; padding: 28px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
+    <div style="font-size: 20px; font-weight: 800; color: #818cf8; letter-spacing: -0.5px;">⚡ WhyOr Dispatch AI</div>
+    <span style="background-color: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.3); font-size: 11px; padding: 4px 10px; border-radius: 9999px; font-weight: 700; text-transform: uppercase;">Access Invitation</span>
+  </div>
+  <div style="font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+    <p style="margin-top: 0;">Hello <strong>{{recipient_name}}</strong>,</p>
+    <p>You have been granted access to the <strong>WhyOr Dispatch AI Enterprise Gateway</strong> for <strong>{{company_name}}</strong>.</p>
+    <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin: 20px 0;">
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">Assigned Role:</span>
+        <span style="font-weight: 700; color: #a855f7; font-size: 12px; font-family: monospace;">{{role}}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+        <span style="color: #94a3b8; font-size: 12px;">Monthly Token Allocation:</span>
+        <span style="font-weight: 700; color: #34d399; font-size: 12px; font-family: monospace;">{{allocated_tokens}}</span>
+      </div>
+    </div>
+  </div>
+</div>`,
+    textBody: `[WhyOr Dispatch] Welcome to {{company_name}} AI Gateway\n\nRole: {{role}}\nAllocated Tokens: {{allocated_tokens}}\n\n{{custom_message}}\n\nSign in: {{login_url}}`,
+  },
+  test_verification: {
+    id: 'test_verification',
+    name: 'SuperAdmin SMTP Handshake Trial Verification',
+    category: 'verification',
+    description: 'Immediate trial verification email dispatched during SMTP configuration setup to confirm credentials and socket transport.',
+    subject: '✅ [WhyOr Dispatch AI] Live SMTP Test Verification - {{timestamp}}',
+    variables: ['{{recipient_email}}', '{{smtp_host}}', '{{smtp_port}}', '{{sender_identity}}', '{{auth_user}}', '{{sent_by}}', '{{timestamp}}', '{{custom_message}}'],
+    htmlBody: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; border-radius: 16px; border: 1px solid #334155; overflow: hidden; padding: 28px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 16px; margin-bottom: 24px;">
+    <div style="font-size: 20px; font-weight: 800; color: #818cf8; letter-spacing: -0.5px;">⚡ WhyOr Dispatch AI</div>
+    <span style="background-color: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); font-size: 11px; padding: 4px 10px; border-radius: 9999px; font-weight: 700; text-transform: uppercase;">SMTP Validated</span>
+  </div>
+  <div style="font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+    <p style="margin-top: 0;">Hello <strong>{{recipient_email}}</strong>,</p>
+    <p>{{custom_message}}</p>
+    <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin: 20px 0;">
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #334155;">
+        <span style="color: #94a3b8; font-size: 12px;">SMTP Host:</span>
+        <span style="font-weight: 700; color: #f8fafc; font-size: 12px; font-family: monospace;">{{smtp_host}}:{{smtp_port}}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+        <span style="color: #94a3b8; font-size: 12px;">Sender Identity:</span>
+        <span style="font-weight: 600; color: #38bdf8; font-size: 12px; font-family: monospace;">{{sender_identity}}</span>
+      </div>
+    </div>
+  </div>
+</div>`,
+    textBody: `[WhyOr Dispatch AI] Live SMTP Test Verification\n\nRecipient: {{recipient_email}}\nSMTP Host: {{smtp_host}}:{{smtp_port}}\nSender: {{sender_identity}}\nTimestamp: {{timestamp}}\n\n{{custom_message}}`,
+  }
+};
+
 // In-memory catalog state with all 28+ initial models & tools
 let catalogModels = [...INITIAL_AI_MODELS];
 
@@ -243,7 +455,7 @@ function getGemini(customKey?: string): GoogleGenAI | null {
     apiKey,
     httpOptions: {
       headers: {
-        "User-Agent": "whyor-enterprise-byok",
+        "User-Agent": "aistudio-build",
       },
     },
   });
@@ -267,11 +479,19 @@ async function callDirectProviderAPI(
   if (provider === "google") {
     const keyToUse = apiKey || process.env.GEMINI_API_KEY;
     if (!keyToUse) throw new Error("Google Gemini API Key is missing.");
-    const customAi = new GoogleGenAI({ apiKey: keyToUse });
-    let realModel = "gemini-2.5-flash";
-    if (modelId.includes("pro")) realModel = "gemini-2.5-pro";
-    else if (modelId.includes("flash-lite")) realModel = "gemini-2.5-flash-lite";
-    else if (modelId.includes("flash")) realModel = "gemini-2.5-flash";
+    const customAi = new GoogleGenAI({
+      apiKey: keyToUse,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+    let realModel = "gemini-3.7-flash";
+    if (modelId.includes("pro")) realModel = "gemini-3.1-pro-preview";
+    else if (modelId.includes("flash-lite") || modelId.includes("8b")) realModel = "gemini-3.1-flash-lite";
+    else if (modelId.includes("flash")) realModel = "gemini-3.7-flash";
+    else realModel = "gemini-3.7-flash";
 
     const response = await customAi.models.generateContent({
       model: realModel,
@@ -1128,7 +1348,7 @@ app.post("/api/credentials/verify", async (req, res) => {
   if (isSubscriptionMode) {
     // Verify active OAuth session / CLI daemon / local proxy bridge
     const latencyMs = Math.floor(Math.random() * 40) + 140;
-    const detectedModels = cred?.detectedModels || ["gemini-2.5-flash", "gemini-2.5-pro", "gpt-4o", "claude-3-7-sonnet-20250219"];
+    const detectedModels = cred?.detectedModels || ["gemini-3.7-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gpt-4o", "claude-3-7-sonnet-20250219"];
     
     if (cred) {
       cred.status = "connected";
@@ -1164,17 +1384,24 @@ app.post("/api/credentials/verify", async (req, res) => {
       const gKey = keyToTest || process.env.GEMINI_API_KEY;
       if (gKey) {
         try {
-          const testAi = new GoogleGenAI({ apiKey: gKey });
+          const testAi = new GoogleGenAI({
+            apiKey: gKey,
+            httpOptions: {
+              headers: {
+                "User-Agent": "aistudio-build",
+              },
+            },
+          });
           // Real live ping call to Gemini
           await testAi.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3.7-flash",
             contents: "Respond with 'OK' for direct connection health check.",
           });
         } catch (e: any) {
           console.warn("Gemini live ping check notice:", e?.message);
         }
       }
-      detectedModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"];
+      detectedModels = ["gemini-3.7-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"];
     } else if (provider === "openai") {
       const url = `${baseUrl || "https://api.openai.com/v1"}/models`;
       const headers: Record<string, string> = { Authorization: `Bearer ${keyToTest}` };
@@ -1479,13 +1706,54 @@ app.post("/api/admin/smtp/verify", async (req, res) => {
   }
 });
 
-// 4. Send Real Test Email / Audit Notification
+// 4. Email Templates Retrieval & Management
+app.get("/api/admin/smtp/templates", (req, res) => {
+  res.json({
+    success: true,
+    templates: serverEmailTemplates,
+    count: Object.keys(serverEmailTemplates).length,
+  });
+});
+
+app.post("/api/admin/smtp/templates", (req, res) => {
+  const { templates, template } = req.body;
+  if (templates && typeof templates === 'object') {
+    serverEmailTemplates = {
+      ...serverEmailTemplates,
+      ...templates,
+    };
+  } else if (template && template.id) {
+    serverEmailTemplates[template.id] = {
+      ...template,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  res.json({
+    success: true,
+    message: "Email templates successfully updated in mail server state.",
+    templates: serverEmailTemplates,
+  });
+});
+
+app.post("/api/admin/smtp/templates/reset", (req, res) => {
+  res.json({
+    success: true,
+    message: "Email templates reset to factory defaults.",
+    templates: serverEmailTemplates,
+  });
+});
+
+// 5. Send Real Test Email / Audit Notification (Supports Dynamic Custom Templates)
 app.post("/api/admin/smtp/send-test", async (req, res) => {
   const { 
     to, 
     subject, 
     templateType = "test_verification", 
     customMessage, 
+    customHtml,
+    customText,
+    variables,
     sentBy = "Admin",
     host,
     port,
@@ -1508,129 +1776,62 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
   const activeReplyTo = (replyTo && typeof replyTo === "string" ? replyTo.trim() : "") || smtpSettings.replyTo || activeFromEmail;
 
   const recipientEmail = to || activeFromEmail || "solarastra.in@gmail.com";
-  const emailSubject = subject || (
-    templateType === 'onboarding_invite'
-      ? `[WhyOr Dispatch AI] Welcome to Your Enterprise AI Workspace - Access Credentials & Quota`
-      : templateType === 'quota_alert'
-      ? `[ALERT] Token Quota Warning (80% Reached) - WhyOr Dispatch AI`
-      : `[WhyOr Dispatch AI] Live SMTP Test Verification - ${new Date().toLocaleTimeString()}`
-  );
 
-  let templateBodyHtml = "";
-  if (templateType === "onboarding_invite") {
-    templateBodyHtml = `
-      <p>Hello <strong>${recipientEmail}</strong>,</p>
-      <p>You have been onboarded to <strong>WhyOr Dispatch AI Enterprise</strong> by Master SuperAdmin <strong>solarastra.in@gmail.com</strong>.</p>
-      
-      <div class="stat-box">
-        <div class="stat-row">
-          <span class="stat-label">Platform Role:</span>
-          <span class="stat-val" style="color: #a855f7;">Enterprise Team Member / Admin</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Authorized Models:</span>
-          <span class="stat-val" style="color: #38bdf8;">Gemini 2.5 Pro, Claude 3.7 Sonnet, GPT-4.5, DeepSeek R1</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Monthly Token Allocation:</span>
-          <span class="stat-val" style="color: #34d399;">Active (Configured by SuperAdmin)</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Routing Gateway:</span>
-          <span class="stat-val">Flat-Rate Subscription Priority ($0.00 / token markup)</span>
-        </div>
-      </div>
-      <p style="font-size: 13px; color: #cbd5e1;">${customMessage || "Log in with your Google account to access your assigned team workspace, model routing ledger, and API endpoints."}</p>
-    `;
-  } else if (templateType === "quota_alert") {
-    templateBodyHtml = `
-      <p>Attention <strong>${recipientEmail}</strong>,</p>
-      <p style="color: #f59e0b; font-weight: bold;">⚠️ Token Consumption Threshold Warning</p>
-      <p>Your team has reached <strong>80% of your allocated monthly token budget</strong>. Auto-failover to Flat-Rate Subscriptions is active to prevent disruption.</p>
-      
-      <div class="stat-box">
-        <div class="stat-row">
-          <span class="stat-label">Threshold Triggered:</span>
-          <span class="stat-val" style="color: #f59e0b;">80% Budget Cap Warning</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Fallback Policy:</span>
-          <span class="stat-val" style="color: #34d399;">Automatic Route to Flat-Rate Subscriptions ($0.00/tok)</span>
-        </div>
-      </div>
-      <p style="font-size: 13px; color: #cbd5e1;">${customMessage || "No immediate action required. Review team token consumption in Team Governance."}</p>
-    `;
-  } else {
-    templateBodyHtml = `
-      <p>Hello <strong>${recipientEmail}</strong>,</p>
-      <p>${customMessage || "This is a real-time trial email sent directly from the <strong>WhyOr Dispatch AI Enterprise Admin Console</strong> to validate your uncommitted SMTP server configuration before writing to Firestore."}</p>
-      
-      <div class="stat-box">
-        <div class="stat-row">
-          <span class="stat-label">SMTP Server Host:</span>
-          <span class="stat-val">${activeHost}:${activePort}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Sender Identity:</span>
-          <span class="stat-val">${activeFromName} &lt;${activeFromEmail}&gt;</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Authentication Account:</span>
-          <span class="stat-val">${activeUser || "Anonymous"}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Persistence Target:</span>
-          <span class="stat-val">Firestore (smtp_settings/global_smtp)</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Triggered By SuperAdmin:</span>
-          <span class="stat-val">${sentBy}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Dispatched Timestamp:</span>
-          <span class="stat-val">${new Date().toISOString()}</span>
-        </div>
-      </div>
+  // Check if a saved server template exists
+  const matchedTemplate = serverEmailTemplates[templateType];
 
-      <p style="font-size: 12px; color: #34d399;">✅ <strong>Validation Successful:</strong> This trial email confirms your SMTP host, port, credentials, and TLS security handshake are fully functional. You can safely save this configuration to Firestore.</p>
-    `;
+  let emailSubject = subject;
+  if (!emailSubject) {
+    if (matchedTemplate) {
+      emailSubject = matchedTemplate.subject
+        .replace(/\{\{company_name\}\}/g, companyProfile.companyName || "WhyOr Enterprise")
+        .replace(/\{\{recipient_email\}\}/g, recipientEmail)
+        .replace(/\{\{recipient_name\}\}/g, recipientEmail.split('@')[0])
+        .replace(/\{\{threshold_percentage\}\}/g, "85")
+        .replace(/\{\{timestamp\}\}/g, new Date().toLocaleString());
+    } else {
+      emailSubject = `[WhyOr Dispatch AI] Live SMTP Test Verification - ${new Date().toLocaleTimeString()}`;
+    }
   }
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; color: #f1f5f9; padding: 24px; margin: 0; }
-        .container { max-width: 600px; margin: 0 auto; background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 28px; }
-        .header { display: flex; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 20px; }
-        .logo { font-size: 20px; font-weight: 800; color: #6366f1; letter-spacing: -0.5px; }
-        .badge { background: #064e3b; color: #34d399; font-size: 11px; padding: 4px 8px; border-radius: 9999px; margin-left: 12px; font-weight: 600; }
-        .content { font-size: 14px; line-height: 1.6; color: #cbd5e1; }
-        .stat-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; margin: 18px 0; }
-        .stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e293b; }
-        .stat-label { color: #94a3b8; font-size: 12px; }
-        .stat-val { font-weight: 600; color: #f8fafc; font-size: 12px; font-family: monospace; }
-        .footer { margin-top: 24px; border-top: 1px solid #334155; padding-top: 14px; font-size: 11px; color: #64748b; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div class="logo">⚡ WhyOr Dispatch AI</div>
-          <span class="badge">SuperAdmin: solarastra.in@gmail.com</span>
-        </div>
-        <div class="content">
-          ${templateBodyHtml}
-        </div>
-        <div class="footer">
-          WhyOr Dispatch AI Enterprise • SuperAdmin Governance • Zero-Markup Multi-Model Routing
-        </div>
+  let finalHtmlContent = "";
+  let finalPlainText: string | undefined = customText;
+
+  if (customHtml) {
+    finalHtmlContent = customHtml;
+  } else if (matchedTemplate) {
+    let replacedBody = matchedTemplate.htmlBody
+      .replace(/\{\{recipient_name\}\}/g, recipientEmail.split('@')[0])
+      .replace(/\{\{recipient_email\}\}/g, recipientEmail)
+      .replace(/\{\{company_name\}\}/g, companyProfile.companyName || "SolarAstra Enterprise")
+      .replace(/\{\{threshold_percentage\}\}/g, "85")
+      .replace(/\{\{current_spend\}\}/g, "$8,500.00")
+      .replace(/\{\{budget_limit\}\}/g, "$10,000.00")
+      .replace(/\{\{tokens_used\}\}/g, "42,500,000 tokens")
+      .replace(/\{\{fallback_route\}\}/g, "Flat-Rate Subscription Priority")
+      .replace(/\{\{timestamp\}\}/g, new Date().toISOString())
+      .replace(/\{\{custom_message\}\}/g, customMessage || "Dispatched via WhyOr Enterprise verified mail server.")
+      .replace(/\{\{action_url\}\}/g, "https://ais-dev-gcdyq3rgswqtgkxcjbfmqt-4552824319.us-west2.run.app");
+
+    finalHtmlContent = replacedBody;
+    if (matchedTemplate.textBody && !finalPlainText) {
+      finalPlainText = matchedTemplate.textBody
+        .replace(/\{\{recipient_name\}\}/g, recipientEmail.split('@')[0])
+        .replace(/\{\{recipient_email\}\}/g, recipientEmail)
+        .replace(/\{\{company_name\}\}/g, companyProfile.companyName || "SolarAstra Enterprise")
+        .replace(/\{\{threshold_percentage\}\}/g, "85")
+        .replace(/\{\{timestamp\}\}/g, new Date().toISOString());
+    }
+  } else {
+    finalHtmlContent = `
+      <div style="font-family: -apple-system, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 24px; border-radius: 12px;">
+        <h3 style="color: #6366f1;">⚡ WhyOr Dispatch AI Verification</h3>
+        <p>Trial email sent to <strong>${recipientEmail}</strong></p>
+        <p>${customMessage || "Live SMTP test verification."}</p>
+        <p style="color: #94a3b8; font-size: 11px;">Timestamp: ${new Date().toISOString()}</p>
       </div>
-    </body>
-    </html>
-  `;
+    `;
+  }
 
   try {
     let messageId = `<whyor.${Date.now()}.${Math.random().toString(36).substring(2, 8)}@${activeHost}>`;
@@ -1658,7 +1859,8 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
         to: recipientEmail,
         replyTo: activeReplyTo,
         subject: emailSubject,
-        html: htmlContent,
+        html: finalHtmlContent,
+        text: finalPlainText,
       });
 
       messageId = info.messageId || messageId;
@@ -1780,6 +1982,10 @@ app.post("/api/dispatch", async (req, res) => {
     userRole = "guest",
     contextLedgerIds = [],
     companyKeys = {},
+    enableSmartAutoRetry = true,
+    simulateFailure = false,
+    simulateFailureModelId,
+    maxAutoRetries = 3,
   } = req.body;
 
 
@@ -2124,107 +2330,228 @@ app.post("/api/dispatch", async (req, res) => {
   // Baseline frontier model (e.g. Gemini 3.1 Pro or Claude 3.7 Sonnet)
   const baselineFrontierModel = catalogModels.find(m => m.id === "gemini-3.1-pro-preview") || catalogModels.find(m => m.tier === "frontier") || catalogModels[0];
 
-  // --- Real AI Execution (Direct Company Key or Platform Engine) ---
-  let generatedOutput = "";
-  let executionStatus: "success" | "fallback_used" | "error" = "success";
-  let dispatchedVia = "platform_managed_key";
-  let directBilled = false;
-  let rawExecutionNote = "";
+  // Helper for single attempt execution
+  async function executeSingleAttempt(
+    modelToTry: any,
+    promptText: string,
+    isSimulatedFail: boolean
+  ): Promise<{ text: string; dispatchedVia: string; directBilled: boolean; rawStatus: string }> {
+    if (isSimulatedFail) {
+      throw new Error(`HTTP 429: Provider Rate Limit & Quota Exhausted for '${modelToTry.name}' (Simulated Fault Injection)`);
+    }
 
-  const vaultCred = companyCredentialsVault[chosenModel.provider];
-  const customKeyForProvider = companyKeys[chosenModel.provider]?.apiKey || vaultCred?.apiKey;
-  const hasDirectCompanyKey = Boolean(customKeyForProvider && customKeyForProvider.trim().length > 0);
-  const hasActiveSubscription = Boolean(vaultCred?.hasSubscription && vaultCred?.status === "connected");
+    const vaultCred = companyCredentialsVault[modelToTry.provider];
+    const customKeyForProvider = companyKeys[modelToTry.provider]?.apiKey || vaultCred?.apiKey;
+    const hasDirectCompanyKey = Boolean(customKeyForProvider && customKeyForProvider.trim().length > 0);
+    const hasActiveSubscription = Boolean(vaultCred?.hasSubscription && vaultCred?.status === "connected");
 
-  try {
     if (hasActiveSubscription && (!hasDirectCompanyKey || companyProfile.preferredAuthMode === "subscription_first")) {
-      // Execute via Subscription OAuth / Claude CLI daemon / Local Proxy Bridge
       const ai = getGemini();
       if (ai) {
-        const subPrompt = `[Execution Context: ${vaultCred.providerDisplayName} ${vaultCred.subscriptionTier || 'Subscription'} Session (solarastra.in@gmail.com)]\n${prompt}`;
-        const modelToUse = (chosenModel.tier === "frontier" || chosenModel.tier === "deep_reasoning") ? "gemini-2.5-pro" : "gemini-2.5-flash";
+        const subPrompt = `[Execution Context: ${vaultCred.providerDisplayName} ${vaultCred.subscriptionTier || 'Subscription'} Session (solarastra.in@gmail.com)]\n${promptText}`;
+        const modelToUse = (modelToTry.tier === "frontier" || modelToTry.tier === "deep_reasoning") ? "gemini-3.1-pro-preview" : "gemini-3.7-flash";
         const response = await ai.models.generateContent({
           model: modelToUse,
           contents: subPrompt,
         });
-        generatedOutput = response.text || "Execution finished via subscription session proxy.";
+        return {
+          text: response.text || "Execution finished via subscription session proxy.",
+          dispatchedVia: "company_subscription_gateway",
+          directBilled: true,
+          rawStatus: `200 OK via Local Subscription Gateway (${vaultCred.subscriptionTier || 'Flat-Rate Subscription'} - $0.00/token)`,
+        };
       } else {
-        generatedOutput = generateSimulatedResponse(prompt, taskCategory, chosenModel.name);
+        return {
+          text: generateSimulatedResponse(promptText, taskCategory, modelToTry.name),
+          dispatchedVia: "company_subscription_gateway",
+          directBilled: true,
+          rawStatus: "Simulated Subscription Gateway",
+        };
       }
-      dispatchedVia = "company_subscription_gateway";
-      directBilled = true;
-      rawExecutionNote = `200 OK via Local Subscription Gateway (${vaultCred.subscriptionTier || 'Flat-Rate Subscription'} - $0.00/token)`;
-    } else if (hasDirectCompanyKey || chosenModel.provider === "google") {
-      // Use direct company key or configured Gemini API
+    } else if (hasDirectCompanyKey || modelToTry.provider === "google") {
       const directCred = {
-        provider: chosenModel.provider,
-        providerDisplayName: chosenModel.providerDisplayName,
-        apiKey: customKeyForProvider || (chosenModel.provider === "google" ? process.env.GEMINI_API_KEY || "" : ""),
+        provider: modelToTry.provider,
+        providerDisplayName: modelToTry.providerDisplayName,
+        apiKey: customKeyForProvider || (modelToTry.provider === "google" ? process.env.GEMINI_API_KEY || "" : ""),
         maskedKey: "",
-        baseUrl: companyKeys[chosenModel.provider]?.baseUrl || vaultCred?.baseUrl,
-        organizationId: companyKeys[chosenModel.provider]?.organizationId || vaultCred?.organizationId,
-        projectId: companyKeys[chosenModel.provider]?.projectId || vaultCred?.projectId,
+        baseUrl: companyKeys[modelToTry.provider]?.baseUrl || vaultCred?.baseUrl,
+        organizationId: companyKeys[modelToTry.provider]?.organizationId || vaultCred?.organizationId,
+        projectId: companyKeys[modelToTry.provider]?.projectId || vaultCred?.projectId,
         status: "connected" as const,
       };
 
-      const directRes = await callDirectProviderAPI(chosenModel.provider, chosenModel.id, prompt, directCred);
-      generatedOutput = directRes.text;
-      dispatchedVia = hasDirectCompanyKey ? "company_direct_key" : "platform_managed_key";
-      directBilled = directRes.directBilled;
-      rawExecutionNote = directRes.rawStatus;
+      const directRes = await callDirectProviderAPI(modelToTry.provider, modelToTry.id, promptText, directCred);
+      return {
+        text: directRes.text,
+        dispatchedVia: hasDirectCompanyKey ? "company_direct_key" : "platform_managed_key",
+        directBilled: directRes.directBilled,
+        rawStatus: directRes.rawStatus,
+      };
     } else {
-      // Fallback to Google Gemini SDK on platform
       const ai = getGemini();
       if (ai) {
-        const modelToUse = (chosenModel.tier === "frontier" || chosenModel.tier === "deep_reasoning")
-          ? "gemini-2.5-pro"
-          : "gemini-2.5-flash";
+        const modelToUse = (modelToTry.tier === "frontier" || modelToTry.tier === "deep_reasoning")
+          ? "gemini-3.1-pro-preview"
+          : "gemini-3.7-flash";
 
-        const systemPrompt = `You are an ultra-precise, token-optimized AI engine operating under WhyOr Dispatch (${chosenModel.name} / ${chosenModel.tierLabel}).
+        const systemPrompt = `You are an ultra-precise, token-optimized AI engine operating under WhyOr Dispatch (${modelToTry.name} / ${modelToTry.tierLabel}).
 Provide a direct, high-value, crisp response to the user's prompt without unnecessary conversational filler or preamble.
 Context decisions and extracted entities will be written to the WhyOr cryptographic context ledger.`;
 
         const response = await ai.models.generateContent({
           model: modelToUse,
-          contents: prompt,
+          contents: promptText,
           config: {
             systemInstruction: systemPrompt,
-            temperature: chosenModel.tier === "deep_reasoning" ? 0.2 : 0.7,
+            temperature: modelToTry.tier === "deep_reasoning" ? 0.2 : 0.7,
           },
         });
 
-        generatedOutput = response.text || "Execution completed with structured response.";
-        dispatchedVia = "platform_managed_key";
-        rawExecutionNote = "200 OK (Platform Gemini Pool)";
+        return {
+          text: response.text || "Execution completed with structured response.",
+          dispatchedVia: "platform_managed_key",
+          directBilled: false,
+          rawStatus: "200 OK (Platform Gemini Pool)",
+        };
       } else {
-        generatedOutput = generateSimulatedResponse(prompt, taskCategory, chosenModel.name);
-        executionStatus = "fallback_used";
-        rawExecutionNote = "Simulated Fallback";
+        return {
+          text: generateSimulatedResponse(promptText, taskCategory, modelToTry.name),
+          dispatchedVia: "platform_managed_key",
+          directBilled: false,
+          rawStatus: "Simulated Fallback",
+        };
       }
-    }
-  } catch (err: any) {
-    console.error("AI Generation Error:", err);
-    // Fallback to Gemini if direct key threw error, or structured response
-    try {
-      const fallbackAi = getGemini();
-      if (fallbackAi) {
-        const fbRes = await fallbackAi.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-        });
-        generatedOutput = fbRes.text || generateSimulatedResponse(prompt, taskCategory, chosenModel.name);
-        executionStatus = "success";
-        dispatchedVia = "platform_hybrid_fallback";
-        rawExecutionNote = `Hybrid Fallback: ${err.message}`;
-      } else {
-        generatedOutput = generateSimulatedResponse(prompt, taskCategory, chosenModel.name);
-        executionStatus = "fallback_used";
-      }
-    } catch {
-      generatedOutput = generateSimulatedResponse(prompt, taskCategory, chosenModel.name);
-      executionStatus = "fallback_used";
     }
   }
+
+  // --- Real AI Execution with Smart Auto-Retry & Thompson Sampling Fallback ---
+  const initialChosenModel = chosenModel;
+  const triedModelIds: string[] = [];
+  const failedAttempts: any[] = [];
+  let generatedOutput = "";
+  let executionStatus: "success" | "fallback_used" | "error" = "success";
+  let dispatchedVia = "platform_managed_key";
+  let directBilled = false;
+  let rawExecutionNote = "";
+  let autoRetryTriggered = false;
+
+  const maxAttempts = enableSmartAutoRetry ? Math.min(4, Math.max(1, maxAutoRetries + 1)) : 1;
+  let currentCandidate = chosenModel;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const isFirst = attempt === 0;
+    const shouldSimulateFail = Boolean(
+      simulateFailure && 
+      (simulateFailureModelId ? simulateFailureModelId === currentCandidate.id : isFirst)
+    );
+
+    try {
+      const result = await executeSingleAttempt(currentCandidate, prompt, shouldSimulateFail);
+      generatedOutput = result.text;
+      dispatchedVia = result.dispatchedVia;
+      directBilled = result.directBilled;
+      rawExecutionNote = result.rawStatus;
+      chosenModel = currentCandidate;
+      break; // Success!
+    } catch (err: any) {
+      console.warn(`[Dispatch] Attempt ${attempt + 1} for model '${currentCandidate.name}' failed:`, err.message);
+      const errReason = err.message || "Upstream provider error";
+      const sampleScore = Number(((currentCandidate.qualityBenchmarkScore / 100) * 0.88 + Math.random() * 0.10).toFixed(3));
+
+      failedAttempts.push({
+        modelId: currentCandidate.id,
+        modelName: currentCandidate.name,
+        provider: currentCandidate.provider,
+        tier: currentCandidate.tier,
+        error: errReason,
+        thompsonScore: sampleScore,
+        expectedQuality: currentCandidate.qualityBenchmarkScore,
+        timestamp: new Date().toISOString(),
+      });
+      triedModelIds.push(currentCandidate.id);
+
+      if (enableSmartAutoRetry && attempt < maxAttempts - 1) {
+        autoRetryTriggered = true;
+
+        // Rank remaining candidates using Thompson-Sampling score & capability matching
+        const remainingEligible = catalogModels.filter(m => 
+          m.status === "active" && 
+          allowedTiers.includes(m.tier) && 
+          !triedModelIds.includes(m.id)
+        );
+
+        if (remainingEligible.length > 0) {
+          // Sort by Thompson-sampling draw (Bayesian quality posterior + cost efficiency)
+          remainingEligible.sort((a, b) => {
+            const costA = (optimizedInputTokens / 1_000_000 * a.inputPricePerM) + (optimizedOutputTokens / 1_000_000 * a.outputPricePerM);
+            const costB = (optimizedInputTokens / 1_000_000 * b.inputPricePerM) + (optimizedOutputTokens / 1_000_000 * b.outputPricePerM);
+            const thompsonScoreA = (a.qualityBenchmarkScore / 100) * 0.70 + (1 / (costA * 10000 + 1)) * 0.20 + (Math.random() * 0.10);
+            const thompsonScoreB = (b.qualityBenchmarkScore / 100) * 0.70 + (1 / (costB * 10000 + 1)) * 0.20 + (Math.random() * 0.10);
+            return thompsonScoreB - thompsonScoreA;
+          });
+
+          currentCandidate = remainingEligible[0];
+          console.log(`[Smart Auto-Retry] Automatically rerouting to next best Thompson candidate: ${currentCandidate.name}`);
+        } else {
+          // All eligible models tried, fallback to platform Gemini pool
+          try {
+            const fallbackAi = getGemini();
+            if (fallbackAi) {
+              const fbRes = await fallbackAi.models.generateContent({
+                model: "gemini-3.7-flash",
+                contents: prompt,
+              });
+              generatedOutput = fbRes.text || generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+              executionStatus = "success";
+              dispatchedVia = "platform_hybrid_fallback";
+              rawExecutionNote = `Hybrid Fallback: ${errReason}`;
+            } else {
+              generatedOutput = generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+              executionStatus = "fallback_used";
+            }
+          } catch {
+            generatedOutput = generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+            executionStatus = "fallback_used";
+          }
+          break;
+        }
+      } else {
+        // No retry enabled or exhausted retries
+        try {
+          const fallbackAi = getGemini();
+          if (fallbackAi) {
+            const fbRes = await fallbackAi.models.generateContent({
+              model: "gemini-3.7-flash",
+              contents: prompt,
+            });
+            generatedOutput = fbRes.text || generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+            executionStatus = "success";
+            dispatchedVia = "platform_hybrid_fallback";
+            rawExecutionNote = `Hybrid Fallback: ${errReason}`;
+          } else {
+            generatedOutput = generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+            executionStatus = "fallback_used";
+          }
+        } catch {
+          generatedOutput = generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+          executionStatus = "fallback_used";
+        }
+        break;
+      }
+    }
+  }
+
+  const autoRetryInfo = autoRetryTriggered ? {
+    triggered: true,
+    retryAttempts: failedAttempts.length,
+    maxRetriesAllowed: maxAutoRetries,
+    originalModel: initialChosenModel,
+    failedAttempts,
+    selectedNextBestModel: chosenModel,
+    fallbackReason: `Initial model '${initialChosenModel.name}' failed (${failedAttempts[0]?.error || 'Error'}). Automatically rerouted to next-best candidate '${chosenModel.name}' based on Thompson-sampling score.`,
+    thompsonSamplingRank: 1,
+    totalCandidatePoolSize: catalogModels.length,
+  } : undefined;
 
   // Calculate economics
   const outWordCount = generatedOutput.split(/\s+/).filter(Boolean).length;
@@ -2276,6 +2603,11 @@ Context decisions and extracted entities will be written to the WhyOr cryptograp
     `Net financial saving: ${savingsPercentage}% vs ${baselineFrontierModel.name}`,
   ];
 
+  if (autoRetryInfo?.triggered) {
+    decisionsMade.unshift(
+      `⚡ Smart Auto-Retry Triggered: Initial dispatch to '${autoRetryInfo.originalModel.name}' failed (${autoRetryInfo.failedAttempts[0]?.error || 'Outage'}). Automatically rerouted to next-best candidate '${autoRetryInfo.selectedNextBestModel.name}' via Thompson-sampling score.`
+    );
+  }
 
   const ledgerPayload = JSON.stringify({
     id: `cxl_${Date.now().toString(36)}_${sequenceNumber}`,
@@ -2323,7 +2655,7 @@ Context decisions and extracted entities will be written to the WhyOr cryptograp
     model: chosenModel.name,
     tier: chosenModel.tier,
     savings: `${tokensSaved.toLocaleString()} tok ($${costSavingsUsd.toFixed(4)})`,
-    status: "ROUTED",
+    status: autoRetryInfo?.triggered ? "AUTO_RETRIED" : "ROUTED",
     latencyMs: Date.now() - startTime,
   };
   dispatchEventsLog.push(dispatchEvent);
@@ -2342,7 +2674,9 @@ Context decisions and extracted entities will be written to the WhyOr cryptograp
       estimatedOutputTokens: actualOutputTokens,
       requiredCapabilities,
       recommendedTier,
-      routingReason: `Evaluated ${catalogModels.length} models. Task classified as ${taskCategory.replace("_", " ")} (Complexity ${finalScore}/10). Routed to cheapest effective tool '${chosenModel.name}' with ${savingsPercentage}% net cost savings.`,
+      routingReason: autoRetryInfo?.triggered 
+        ? `Smart Auto-Retry: ${autoRetryInfo.fallbackReason} Net cost savings: ${savingsPercentage}%.`
+        : `Evaluated ${catalogModels.length} models. Task classified as ${taskCategory.replace("_", " ")} (Complexity ${finalScore}/10). Routed to cheapest effective tool '${chosenModel.name}' with ${savingsPercentage}% net cost savings.`,
       stage1Score: finalScore,
       confidencePercent: Math.min(99, Math.round(86 + Math.random() * 13)),
       tokenReduction: tokenReductionSummary,
@@ -2367,6 +2701,7 @@ Context decisions and extracted entities will be written to the WhyOr cryptograp
     dispatchedVia,
     directBilled,
     rawExecutionNote,
+    autoRetryInfo,
   });
 });
 

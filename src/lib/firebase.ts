@@ -157,6 +157,58 @@ export async function loadSmtpSettingsFromFirestore(): Promise<SmtpConfigFiresto
   }
 }
 
+// 2b. Email Templates Persistence (HTML & Text Customization for Billing/System Notifications)
+export interface EmailTemplateConfig {
+  id: string;
+  name: string;
+  category: 'billing' | 'system' | 'security' | 'onboarding' | 'verification';
+  subject: string;
+  htmlBody: string;
+  textBody?: string;
+  description: string;
+  variables: string[];
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export async function saveEmailTemplateToFirestore(template: EmailTemplateConfig) {
+  try {
+    const templateRef = doc(db, 'email_templates', template.id);
+    await setDoc(templateRef, {
+      ...template,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.error(`Error saving email template ${template.id} to Firestore:`, err);
+  }
+}
+
+export async function saveAllEmailTemplatesToFirestore(templates: Record<string, EmailTemplateConfig>) {
+  try {
+    const promises = Object.values(templates).map((template) => saveEmailTemplateToFirestore(template));
+    await Promise.all(promises);
+  } catch (err) {
+    console.error('Error saving all email templates to Firestore:', err);
+  }
+}
+
+export async function loadEmailTemplatesFromFirestore(): Promise<Record<string, EmailTemplateConfig> | null> {
+  try {
+    const snap = await getDocs(collection(db, 'email_templates'));
+    if (snap.empty) {
+      return null;
+    }
+    const result: Record<string, EmailTemplateConfig> = {};
+    snap.forEach((docSnap) => {
+      result[docSnap.id] = docSnap.data() as EmailTemplateConfig;
+    });
+    return result;
+  } catch (err) {
+    console.error('Error loading email templates from Firestore:', err);
+    return null;
+  }
+}
+
 // 3. Email Logs
 export async function logEmailToFirestore(log: {
   to: string;

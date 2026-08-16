@@ -36,7 +36,7 @@ import {
   ChevronRight,
   Gauge
 } from 'lucide-react';
-import { AIModel, UserPersona, ComplexityClassification, CandidateEvaluation, ModelTier } from '../types';
+import { AIModel, UserPersona, ComplexityClassification, CandidateEvaluation, ModelTier, AutoRetryInfo } from '../types';
 import { TaskProbabilityDistribution } from '../core/embeddingClassifier';
 import { TASK_ARCHETYPES } from '../core/taskTaxonomy';
 import { QualityModelTracker } from '../core/qualityModel';
@@ -50,6 +50,7 @@ interface AutoRoutingExplainabilityPanelProps {
   allModels: AIModel[];
   activePersona: UserPersona;
   qualityTracker?: QualityModelTracker;
+  autoRetryInfo?: AutoRetryInfo;
   onSelectAlternativeModel?: (modelId: string) => void;
 }
 
@@ -62,6 +63,7 @@ export const AutoRoutingExplainabilityPanel: React.FC<AutoRoutingExplainabilityP
   allModels,
   activePersona,
   qualityTracker,
+  autoRetryInfo,
   onSelectAlternativeModel,
 }) => {
   // Interactive criteria weighting sliders for explainability simulation
@@ -240,6 +242,75 @@ export const AutoRoutingExplainabilityPanel: React.FC<AutoRoutingExplainabilityP
           </button>
         </div>
       </div>
+
+      {/* Smart Auto-Retry Telemetry Banner if triggered */}
+      {autoRetryInfo && autoRetryInfo.triggered && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-amber-950/40 via-slate-900/80 to-blue-950/40 border border-amber-400/50 shadow-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-400/20 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-400/40 animate-pulse">
+                <Zap className="w-4 h-4" />
+              </span>
+              <div>
+                <div className="text-xs font-mono font-bold text-amber-300 uppercase tracking-wider">
+                  Smart Auto-Retry Fallback Activated (Thompson-Sampling Posterior)
+                </div>
+                <div className="text-[11px] text-slate-300 mt-0.5">
+                  Initial model failed; auto-routed to #1 Thompson alternative in {autoRetryInfo.retryAttempts} attempt(s).
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-semibold">
+                Recovered via {autoRetryInfo.selectedNextBestModel.name}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-2 text-xs font-mono">
+            <div className="text-slate-300 leading-relaxed font-sans">
+              {autoRetryInfo.fallbackReason}
+            </div>
+
+            {/* Failure Chain Breakdown */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/5 text-[11px]">
+              {autoRetryInfo.failedAttempts.map((fa, idx) => (
+                <div key={idx} className="p-2.5 rounded-lg bg-red-950/30 border border-red-500/30 text-red-200 space-y-1">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="flex items-center gap-1 text-red-400">
+                      <XCircle className="w-3.5 h-3.5" /> Failed Attempt #{idx + 1}: {fa.modelName}
+                    </span>
+                    <span className="text-[10px] text-red-300 font-mono">Tier: {fa.tier.toUpperCase()}</span>
+                  </div>
+                  <div className="text-[10px] text-red-300/90 font-mono truncate">
+                    Reason: {fa.error}
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-red-500/20">
+                    <span>Thompson Posterior: {(fa.thompsonScore * 100).toFixed(1)}%</span>
+                    <span>Score: {fa.expectedQuality}/100</span>
+                  </div>
+                </div>
+              ))}
+
+              <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-emerald-200 space-y-1">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Next-Best Alternative: {autoRetryInfo.selectedNextBestModel.name}
+                  </span>
+                  <span className="text-[10px] text-emerald-300 font-mono">Rank #{autoRetryInfo.thompsonSamplingRank}</span>
+                </div>
+                <div className="text-[10px] text-emerald-300/90 font-mono">
+                  Selected as highest-confidence eligible candidate from {autoRetryInfo.totalCandidatePoolSize} model catalog.
+                </div>
+                <div className="text-[10px] text-slate-300 flex items-center justify-between pt-1 border-t border-emerald-500/20">
+                  <span>Quality: {autoRetryInfo.selectedNextBestModel.qualityBenchmarkScore}/100</span>
+                  <span className="text-emerald-400 font-bold">Status: 200 OK Executed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Primary Criteria Highlights (4 Key Pillars) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

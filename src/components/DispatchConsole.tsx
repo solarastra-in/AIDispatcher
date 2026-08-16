@@ -45,7 +45,10 @@ import {
   ThumbsDown,
   RotateCcw,
   ShieldAlert,
-  Activity
+  Activity,
+  AlertTriangle,
+  X,
+  RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -85,6 +88,9 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
   const [taskDistribution, setTaskDistribution] = useState<TaskProbabilityDistribution>(() => softClassifier.classify(PRESET_SAMPLE_PROMPTS[0].prompt));
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const [lastFeedbackType, setLastFeedbackType] = useState<FeedbackSignalType | null>(null);
+  const [smartAutoRetry, setSmartAutoRetry] = useState<boolean>(true);
+  const [simulateFailure, setSimulateFailure] = useState<boolean>(false);
+  const [retryNotificationDismissed, setRetryNotificationDismissed] = useState<boolean>(false);
 
   // Live classify prompt into 7-archetype probability distribution
   React.useEffect(() => {
@@ -129,10 +135,13 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
   }, [prefilledModelId, onClearPrefill]);
 
   // Trigger dispatch request
-  const handleDispatch = async () => {
+  const handleDispatch = async (forceSimulateFailure?: boolean) => {
     if (!prompt.trim() || isDispatching) return;
     setIsDispatching(true);
+    setRetryNotificationDismissed(false);
     setActiveStep(1);
+
+    const shouldSimulateFailure = forceSimulateFailure !== undefined ? forceSimulateFailure : simulateFailure;
 
     try {
       // 1. Stage 1 Heuristic Pre-call classification
@@ -149,7 +158,7 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
         activePersona.allowedTiers
       );
       
-      const finalModel = effectiveModelId ? (models.find(m => m.id === effectiveModelId) || chosenModel) : chosenModel;
+      const initialCandidate = effectiveModelId ? (models.find(m => m.id === effectiveModelId) || chosenModel) : chosenModel;
       setActiveStep(3);
 
       // 3. Call Full-Stack Server API
@@ -166,6 +175,10 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
             enforceModelId: routingMode === 'enforce_model' ? enforcedModelId : undefined,
             userRole: activePersona.role,
             byokKey: activePersona.canBYOK ? byokKey : undefined,
+            enableSmartAutoRetry: smartAutoRetry,
+            simulateFailure: shouldSimulateFailure,
+            simulateFailureModelId: initialCandidate.id,
+            maxAutoRetries: 3
           }),
         });
 
@@ -194,17 +207,58 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
         // Fallback simulation if offline
         const inTokens = classification.estimatedInputTokens;
         const outTokens = classification.estimatedOutputTokens;
-        const economics = calculateTokenSavings(inTokens, outTokens, finalModel, baselineFrontierModel);
         const tokenReduction = applyAutomatedTokenReduction(prompt, recentLedger, classification.taskCategory);
         const candidateResult = evaluateAllCandidateModels(models, classification, activePersona.allowedTiers);
+
+        let finalModel = initialCandidate;
+        let autoRetryInfo = undefined;
+
+        if (shouldSimulateFailure && smartAutoRetry) {
+          // Emulate smart auto-retry fallback via Thompson-sampling on client
+          const altResult = apiService.decisionEngine.selectNextBestAlternative(
+            models,
+            taskDistribution,
+            activePersona.allowedTiers,
+            [initialCandidate.id]
+          );
+
+          if (altResult.nextModel) {
+            const nextBest = altResult.nextModel;
+            finalModel = nextBest;
+            autoRetryInfo = {
+              triggered: true,
+              originalModel: initialCandidate,
+              selectedNextBestModel: nextBest,
+              failedAttempts: [
+                {
+                  modelId: initialCandidate.id,
+                  modelName: initialCandidate.name,
+                  tier: initialCandidate.tier,
+                  error: 'Simulated 429 Rate Limit (Upstream Capacity Exhausted)',
+                  timestamp: new Date().toISOString(),
+                  thompsonScore: 0.88,
+                  expectedQuality: initialCandidate.qualityBenchmarkScore
+                }
+              ],
+              retryAttempts: 1,
+              thompsonSamplingRank: altResult.thompsonSamplingRank || 1,
+              totalCandidatePoolSize: models.length,
+              fallbackReason: altResult.reason || `Initial model (${initialCandidate.name}) failed with a simulated 429 upstream rate limit. Auto-rerouted to the #1 Thompson alternative (${nextBest.name}) based on Bayesian quality score (${nextBest.qualityBenchmarkScore}/100) and cost efficiency.`
+            };
+          }
+        }
         
+        const economics = calculateTokenSavings(inTokens, outTokens, finalModel, baselineFrontierModel);
+
         const ledgerEntry = await createLedgerEntry(
           `sess_${Date.now().toString(36)}`,
           recentLedger.length + 1,
           recentLedger[0]?.hash || '0000000000000000000000000000000000000000000000000000000000000000',
           prompt,
           finalModel,
-          'Executed via WhyOr client routing & token compression engine.',
+          autoRetryInfo?.triggered
+            ? `Executed via WhyOr Smart Auto-Retry (Recovered from ${initialCandidate.name} to ${finalModel.name}).`
+            : 'Executed via WhyOr client routing & token compression engine.',
           inTokens + outTokens,
           economics.tokensSaved
         );
@@ -219,7 +273,8 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
           chosenModel: finalModel,
           baselineFrontierModel,
           candidateEvaluations: candidateResult.evaluations,
-          outputContent: `### Token-Optimized Output (${finalModel.name})\n\nContext has been successfully extracted and written to WhyOr Context Ledger.\n\n\`\`\`json\n{\n  "status": "success",\n  "task_category": "${classification.taskCategory}",\n  "routed_tier": "${finalModel.tier}",\n  "model_selected": "${finalModel.name}",\n  "token_savings_pct": "${economics.savingsPercentage}%",\n  "tokens_reduced": ${tokenReduction.totalTokensSaved}\n}\n\`\`\``,
+          autoRetryInfo,
+          outputContent: `### Token-Optimized Output (${finalModel.name})\n\n${autoRetryInfo?.triggered ? `> ⚡ **Smart Auto-Retry Activated**: Request to \`${initialCandidate.name}\` failed (Simulated 429 error); automatically rerouted to \`${finalModel.name}\` based on Thompson sampling score.\n\n` : ''}Context has been successfully extracted and written to WhyOr Context Ledger.\n\n\`\`\`json\n{\n  "status": "success",\n  "task_category": "${classification.taskCategory}",\n  "routed_tier": "${finalModel.tier}",\n  "model_selected": "${finalModel.name}",\n  "token_savings_pct": "${economics.savingsPercentage}%",\n  "tokens_reduced": ${tokenReduction.totalTokensSaved},\n  "smart_auto_retry_triggered": ${Boolean(autoRetryInfo?.triggered)}\n}\n\`\`\``,
           metrics: {
             inputTokens: inTokens,
             outputTokens: outTokens,
@@ -461,8 +516,39 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
               )}
             </div>
 
+            {/* Smart Auto-Retry & Fault Tolerance Bar */}
+            <div className="mt-3.5 pt-3 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-300 hover:text-white">
+                <input
+                  type="checkbox"
+                  id="smart-auto-retry-toggle"
+                  checked={smartAutoRetry}
+                  onChange={(e) => setSmartAutoRetry(e.target.checked)}
+                  className="rounded border-white/20 bg-slate-950 text-amber-500 focus:ring-amber-400/40 w-4 h-4 cursor-pointer"
+                />
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Zap className={`w-3.5 h-3.5 ${smartAutoRetry ? 'text-amber-400' : 'text-slate-500'}`} />
+                  Smart Auto-Retry <span className="text-[10px] text-slate-400">(Thompson Reroute)</span>
+                </span>
+              </label>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  id="simulate-failure-btn"
+                  onClick={() => handleDispatch(true)}
+                  disabled={isDispatching || !prompt.trim()}
+                  title="Simulate an upstream model failure (429/503) to test automatic Thompson-sampling rerouting"
+                  className="px-2.5 py-1 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 hover:text-orange-200 border border-orange-400/30 text-[11px] transition-all cursor-pointer flex items-center gap-1.5 font-semibold disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 text-orange-400 ${isDispatching ? 'animate-spin' : ''}`} />
+                  <span>🧪 Test Auto-Retry (Simulate Error)</span>
+                </button>
+              </div>
+            </div>
+
             {/* Dispatch Action Button */}
-            <div className="mt-5 flex items-center justify-between">
+            <div className="mt-4 flex items-center justify-between">
               <div className="text-[11px] font-mono text-slate-400">
                 {activePersona.role === 'guest' ? (
                   <span className="text-amber-400">⚠️ Guest session (Low/Mid tiers only)</span>
@@ -474,7 +560,7 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
               <button
                 id="dispatch-submit-btn"
                 data-testid="route-request-btn"
-                onClick={handleDispatch}
+                onClick={() => handleDispatch(false)}
                 disabled={isDispatching || !prompt.trim()}
                 title="Route Request & Optimize (Cmd+Enter)"
                 className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg backdrop-blur-md border ${
@@ -548,6 +634,57 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
         <div className="lg:col-span-6 space-y-4">
           {responseResult ? (
             <>
+              {/* Smart Auto-Retry User Notification Banner */}
+              {responseResult.autoRetryInfo && responseResult.autoRetryInfo.triggered && !retryNotificationDismissed && (
+                <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-emerald-500/20 border border-amber-400/50 rounded-2xl p-4 shadow-xl backdrop-blur-2xl relative overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 shrink-0 mt-0.5 animate-pulse">
+                        <Zap className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-wider">
+                            Smart Auto-Retry Recovered Request
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-semibold">
+                            Rerouted in {responseResult.autoRetryInfo.retryAttempts} attempt(s)
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                          Initial model <strong className="text-amber-200">{responseResult.autoRetryInfo.originalModel.name}</strong> failed ({responseResult.autoRetryInfo.failedAttempts[0]?.error || 'Upstream Error'}). WhyOr automatically routed to the next-best model <strong className="text-emerald-300">{responseResult.autoRetryInfo.selectedNextBestModel.name}</strong> based on the Thompson-sampling score ({responseResult.autoRetryInfo.selectedNextBestModel.qualityBenchmarkScore}/100 quality).
+                        </p>
+                        
+                        <div className="pt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/40 text-slate-300 border border-white/10">
+                            <span className="text-red-400 font-bold">❌ {responseResult.autoRetryInfo.originalModel.name}</span>
+                            <span className="text-slate-500">➔</span>
+                            <span className="text-emerald-400 font-bold">✅ {responseResult.autoRetryInfo.selectedNextBestModel.name} (Rank #{responseResult.autoRetryInfo.thompsonSamplingRank})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setResultTab('explainability')}
+                            className="px-2.5 py-0.5 rounded-md bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border border-amber-400/30 text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <span>Inspect Telemetry</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setRetryNotificationDismissed(true)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                      title="Dismiss notification"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Savings Highlight Card */}
               <div className="bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-blue-950/40 border border-amber-400/40 rounded-2xl p-5 shadow-2xl relative overflow-hidden backdrop-blur-2xl">
                 <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -652,9 +789,15 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
                     >
                       <Scale className="w-3 h-3 text-amber-400" />
                       Auto-Routing Explainability
-                      <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 py-0.2 rounded-full border border-amber-400/30">
-                        Criteria
-                      </span>
+                      {responseResult.autoRetryInfo?.triggered ? (
+                        <span className="text-[9px] bg-orange-500/30 text-orange-300 px-1.5 py-0.2 rounded-full border border-orange-400/50 flex items-center gap-0.5 animate-pulse font-bold">
+                          <Zap className="w-2.5 h-2.5" /> Retried
+                        </span>
+                      ) : (
+                        <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 py-0.2 rounded-full border border-amber-400/30">
+                          Criteria
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={() => setResultTab('taxonomy')}
@@ -1011,6 +1154,7 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
                     allModels={models}
                     activePersona={activePersona}
                     qualityTracker={apiService.qualityTracker}
+                    autoRetryInfo={responseResult.autoRetryInfo}
                     onSelectAlternativeModel={(modelId) => {
                       setRoutingMode('enforce_model');
                       setEnforcedModelId(modelId);
