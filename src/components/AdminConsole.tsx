@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Mail, 
+  MailCheck,
   Send, 
   CheckCircle2, 
   AlertCircle, 
@@ -89,6 +90,15 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
+  const [isSendingTrial, setIsSendingTrial] = useState<boolean>(false);
+  const [trialValidationResult, setTrialValidationResult] = useState<{
+    success: boolean;
+    recipient: string;
+    durationMs?: number;
+    messageId?: string;
+    error?: string;
+    verifiedAt?: string;
+  } | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -381,6 +391,106 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
     }
   };
 
+  // Send Trial Email to SuperAdmin (Validate SMTP before saving to Firestore)
+  const handleSendTrialEmailToSuperAdmin = async () => {
+    const superAdminEmail = currentUser?.email || 'solarastra.in@gmail.com';
+    setIsSendingTrial(true);
+    setStatusMessage(null);
+    setTrialValidationResult(null);
+
+    if (!smtpHost.trim()) {
+      setStatusMessage({ type: 'error', text: 'Please specify an SMTP Host (e.g. smtp.gmail.com) before sending a trial email.' });
+      setIsSendingTrial(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        to: superAdminEmail,
+        subject: `[WhyOr Dispatch AI] SuperAdmin SMTP Validation Trial Email (${new Date().toLocaleTimeString()})`,
+        templateType: 'test_verification',
+        customMessage: `Real-time trial verification email to validate SMTP server host (${smtpHost.trim()}:${smtpPort}) for SuperAdmin (${superAdminEmail}) prior to saving to Firestore.`,
+        sentBy: `SuperAdmin (${superAdminEmail})`,
+        host: smtpHost.trim(),
+        port: Number(smtpPort),
+        secure: smtpSecure,
+        requireTls: smtpRequireTls,
+        user: smtpUser.trim(),
+        pass: smtpPass.trim() || (hasStoredPassword ? '••••••••••••••••' : ''),
+        fromEmail: smtpFromEmail.trim() || superAdminEmail,
+        fromName: smtpFromName.trim() || 'WhyOr Dispatch AI Enterprise',
+        replyTo: smtpReplyTo.trim() || superAdminEmail,
+      };
+
+      const res = await fetch('/api/admin/smtp/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setIsVerified(true);
+        const verifiedTime = new Date().toISOString();
+        setLastVerifiedAt(verifiedTime);
+        setTrialValidationResult({
+          success: true,
+          recipient: superAdminEmail,
+          durationMs: data.durationMs,
+          messageId: data.messageId,
+          verifiedAt: verifiedTime,
+        });
+
+        setStatusMessage({
+          type: 'success',
+          text: `Trial email delivered to SuperAdmin (${superAdminEmail}) in ${data.durationMs}ms (Message-ID: ${data.messageId}). SMTP configuration is validated! You can now safely save it to Firestore.`,
+        });
+
+        if (data.log) {
+          await logEmailToFirestore({
+            to: superAdminEmail,
+            from: `${smtpFromName || 'WhyOr Dispatch AI Enterprise'} <${smtpFromEmail || superAdminEmail}>`,
+            subject: payload.subject,
+            emailType: 'test_verification',
+            status: 'sent',
+            messageId: data.messageId,
+            sentBy: superAdminEmail,
+          });
+        }
+
+        await recordAuditLogToFirestore(
+          'SuperAdmin Trial Email Validated',
+          'smtp',
+          superAdminEmail,
+          `Dispatched pre-save trial email to ${superAdminEmail} via ${smtpHost}:${smtpPort} (Latency: ${data.durationMs}ms)`
+        );
+
+        fetchEmailLogs();
+      } else {
+        setIsVerified(false);
+        setTrialValidationResult({
+          success: false,
+          recipient: superAdminEmail,
+          error: data.error || 'Connection failed or credentials rejected',
+        });
+        setStatusMessage({
+          type: 'error',
+          text: `Trial Email Failed: ${data.error || 'Could not dispatch test email'}. ${data.recommendation || 'Please verify host, port, username, and password/App Password.'}`,
+        });
+      }
+    } catch (err: any) {
+      setIsVerified(false);
+      setTrialValidationResult({
+        success: false,
+        recipient: superAdminEmail,
+        error: err.message,
+      });
+      setStatusMessage({ type: 'error', text: `Trial Email Error: ${err.message}` });
+    } finally {
+      setIsSendingTrial(false);
+    }
+  };
+
   // Send Test Email Handler
   const handleSendTestEmail = async () => {
     setIsSendingTest(true);
@@ -396,6 +506,15 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
           templateType: testTemplate,
           customMessage: testCustomMessage.trim(),
           sentBy: currentUser?.email || 'Admin Superuser',
+          host: smtpHost.trim(),
+          port: Number(smtpPort),
+          secure: smtpSecure,
+          requireTls: smtpRequireTls,
+          user: smtpUser.trim(),
+          pass: smtpPass.trim() || (hasStoredPassword ? '••••••••••••••••' : ''),
+          fromEmail: smtpFromEmail.trim(),
+          fromName: smtpFromName.trim(),
+          replyTo: smtpReplyTo.trim(),
         }),
       });
 
@@ -854,27 +973,101 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
                 </div>
               </div>
 
+              {/* Pre-Save Trial Validation Status Box */}
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-white/10 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <MailCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                        SuperAdmin Pre-Save Trial Validation
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Dispatch a trial email to <span className="font-mono text-purple-300 font-semibold">{currentUser?.email || 'solarastra.in@gmail.com'}</span> to validate uncommitted SMTP settings before persisting to Firestore.
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono shrink-0 uppercase font-semibold border ${
+                    isVerified
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${isVerified ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                    {isVerified ? 'Validated & Ready' : 'Pending Pre-Save Test'}
+                  </span>
+                </div>
+
+                {trialValidationResult && (
+                  <div className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 ${
+                    trialValidationResult.success
+                      ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200'
+                      : 'bg-rose-950/40 border-rose-500/30 text-rose-200'
+                  }`}>
+                    {trialValidationResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="font-semibold">
+                        {trialValidationResult.success
+                          ? `Trial Email Delivered to ${trialValidationResult.recipient} (${trialValidationResult.durationMs}ms)`
+                          : `Trial Email Delivery Failed to ${trialValidationResult.recipient}`}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-300 opacity-90 truncate">
+                        {trialValidationResult.success
+                          ? `Message-ID: ${trialValidationResult.messageId} • Host verified: ${smtpHost}:${smtpPort}`
+                          : trialValidationResult.error}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleVerifySmtp}
-                  disabled={isVerifying}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-white text-xs font-medium transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isVerifying ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  )}
-                  <span>{isVerifying ? 'Testing Handshake...' : 'Verify SMTP Handshake'}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    id="btn-verify-smtp-handshake"
+                    onClick={handleVerifySmtp}
+                    disabled={isVerifying || isSendingTrial}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-white text-xs font-medium transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isVerifying ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                    <span>{isVerifying ? 'Testing Socket...' : 'Verify Handshake'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="btn-send-trial-email"
+                    onClick={handleSendTrialEmailToSuperAdmin}
+                    disabled={isSendingTrial || isVerifying || isSaving}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isSendingTrial ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isSendingTrial ? 'Sending Trial Email...' : `Send Trial Email to ${currentUser?.email || 'solarastra.in@gmail.com'}`}</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"
+                  id="btn-save-smtp-firestore"
                   onClick={handleSaveSmtp}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all cursor-pointer disabled:opacity-50"
+                  disabled={isSaving || isSendingTrial}
+                  className={`flex items-center gap-2 px-5 py-2 rounded-xl text-white text-xs font-semibold shadow-lg transition-all cursor-pointer disabled:opacity-50 ${
+                    isVerified
+                      ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30 ring-1 ring-emerald-400/40'
+                      : 'bg-indigo-600/90 hover:bg-indigo-500 shadow-indigo-600/20'
+                  }`}
                 >
                   {isSaving ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -891,14 +1084,23 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
           <div className="lg:col-span-5 space-y-6">
             {/* Live Dispatch Tool */}
             <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-4">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Send className="w-4 h-4 text-emerald-400" />
-                  Live Test Email Dispatcher
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Send a real-time test notification to verify end-to-end deliverability.
-                </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Send className="w-4 h-4 text-emerald-400" />
+                    Live Test Email Dispatcher
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Send a real-time test notification to verify end-to-end deliverability.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTestRecipient(currentUser?.email || 'solarastra.in@gmail.com')}
+                  className="text-[10px] text-purple-300 hover:text-purple-200 bg-purple-950/40 hover:bg-purple-900/50 border border-purple-800/40 px-2 py-1 rounded-lg font-mono transition-colors"
+                >
+                  Fill SuperAdmin
+                </button>
               </div>
 
               <div>

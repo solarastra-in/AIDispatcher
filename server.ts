@@ -13,6 +13,16 @@ import {
   type LocalProxyCredential,
   type AuthMethod,
 } from "./src/server/localProxyAdapter";
+import {
+  getPlatformAssistantConfig,
+  setPlatformAssistantConfig,
+} from "./src/server/platformAssistant";
+import { redraftPrompt } from "./src/server/promptRedraft";
+import {
+  recordTurnAndMaybeCompress,
+  buildCompressedPrompt,
+  getSessionCompressionStats,
+} from "./src/server/contextCompressor";
 
 const app = express();
 const PORT = 3000;
@@ -846,6 +856,129 @@ app.post("/api/dispatch/local-proxy", async (req, res) => {
   }
 });
 
+// ==================== CONNECT FLOWS (per-provider capability + status) ====================
+
+// Drives the frontend's "Connect [Provider]" panel: which auth methods are
+// actually available for each provider, and this account's current status
+// for each.
+app.get("/api/providers/connect-flows", (req, res) => {
+  const flows = Object.values(PROVIDER_CAPABILITIES).map((cap) => {
+    const cred = companyCredentialsVault[cap.provider];
+    return {
+      provider: cap.provider,
+      providerDisplayName: cap.providerDisplayName,
+      apiKeySupported: cap.apiKeySupported,
+      localProxySupported: cap.localProxySupported,
+      localProxyNotes: cap.localProxyNotes,
+      currentStatus: {
+        hasApiKey: !!cred?.apiKey,
+        hasVerifiedLocalProxy: !!cred?.localProxyUrl && cred?.status === "connected",
+        localProxyUrl: cred?.localProxyUrl,
+        lastVerifiedAt: cred?.lastVerifiedAt,
+        detectedModels: cred?.detectedModels || [],
+      },
+      // Only populated for providers where localProxySupported is true
+      setupSteps: cap.localProxySupported
+        ? [
+            { step: 1, action: `Install and log in to the official ${cap.providerDisplayName} CLI on your own machine (your own subscription, your own login).` },
+            { step: 2, action: `Download the WhyOr local-proxy wrapper script for ${cap.provider} from /downloads/${cap.provider}-local-proxy.js and run: node ${cap.provider}-local-proxy.js --port <port>` },
+            { step: 3, action: `Paste the printed URL (e.g. http://localhost:<port>/v1) into this panel and click "Verify" — WhyOr makes one live request to confirm it's reachable before saving anything.` },
+          ]
+        : [
+            { step: 1, action: `Paste your ${cap.providerDisplayName} API key below. ${cap.localProxyNotes}` },
+          ],
+    };
+  });
+  res.json({ flows });
+});
+
+// ==================== ADMIN: PLATFORM ASSISTANT SETTINGS ====================
+
+app.get("/api/admin/settings/platform-assistant", (req, res) => {
+  res.json(getPlatformAssistantConfig());
+});
+
+app.post("/api/admin/settings/platform-assistant", (req, res) => {
+  const { provider, modelId, useLocalProxyIfAvailable, maxUtilityTokens, adminId } = req.body;
+  if (!provider || !modelId) {
+    return res.status(400).json({ error: "provider and modelId are required" });
+  }
+  if (!PROVIDER_CAPABILITIES[provider]) {
+    return res.status(400).json({ error: `Unknown provider '${provider}'` });
+  }
+  const updated = setPlatformAssistantConfig(
+    { provider, modelId, useLocalProxyIfAvailable, maxUtilityTokens },
+    adminId || "unknown_admin"
+  );
+  res.json(updated);
+});
+
+// ==================== PROMPT REDRAFT (opt-in, user-triggered) ====================
+
+app.post("/api/prompt/redraft", async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: "prompt is required" });
+  }
+  try {
+    const providerCaller = (provider: string, modelId: string, p: string) =>
+      callDirectProviderAPI(provider, modelId, p);
+    const result = await redraftPrompt(prompt, providerCaller);
+    res.json(result);
+  } catch (err: any) {
+    res.status(502).json({ error: err.message || "Redraft failed", original: prompt });
+  }
+});
+
+// ==================== CONTEXT COMPRESSION (automatic, per session) ====================
+
+app.post("/api/chat/:sessionId/compressed-prompt", async (req, res) => {
+  const { sessionId } = req.params;
+  const { userPrompt } = req.body;
+  if (!userPrompt || !userPrompt.trim()) {
+    return res.status(400).json({ error: "userPrompt is required" });
+  }
+  try {
+    const providerCaller = (provider: string, modelId: string, p: string) =>
+      callDirectProviderAPI(provider, modelId, p);
+
+    const { compressed, tokensBefore, tokensAfter } = await recordTurnAndMaybeCompress(
+      sessionId,
+      { role: "user", content: userPrompt },
+      providerCaller
+    );
+    const effectivePrompt = buildCompressedPrompt(sessionId, userPrompt);
+
+    res.json({ effectivePrompt, compressed, tokensBefore, tokensAfter });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message || "Compression failed" });
+  }
+});
+
+app.post("/api/chat/:sessionId/record-assistant-turn", async (req, res) => {
+  const { sessionId } = req.params;
+  const { assistantContent } = req.body;
+  if (!assistantContent) {
+    return res.status(400).json({ error: "assistantContent is required" });
+  }
+  try {
+    const providerCaller = (provider: string, modelId: string, p: string) =>
+      callDirectProviderAPI(provider, modelId, p);
+    const result = await recordTurnAndMaybeCompress(
+      sessionId,
+      { role: "assistant", content: assistantContent },
+      providerCaller
+    );
+    res.json(result);
+  } catch (err: any) {
+    res.status(502).json({ error: err.message || "Failed to record assistant turn" });
+  }
+});
+
+app.get("/api/chat/:sessionId/compression-stats", (req, res) => {
+  res.json(getSessionCompressionStats(req.params.sessionId));
+});
+
 // Subscription Linking / Configuration
 app.post("/api/credentials/subscription/login", (req, res) => {
   const { provider, email, oauthType = "google", subscriptionTier, sessionToken, localProxyUrl } = req.body;
@@ -1348,10 +1481,33 @@ app.post("/api/admin/smtp/verify", async (req, res) => {
 
 // 4. Send Real Test Email / Audit Notification
 app.post("/api/admin/smtp/send-test", async (req, res) => {
-  const { to, subject, templateType = "test_verification", customMessage, sentBy = "Admin" } = req.body;
+  const { 
+    to, 
+    subject, 
+    templateType = "test_verification", 
+    customMessage, 
+    sentBy = "Admin",
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    fromEmail,
+    fromName,
+    replyTo,
+  } = req.body;
   const start = Date.now();
 
-  const recipientEmail = to || smtpSettings.fromEmail || "solarastra.in@gmail.com";
+  const activeHost = (host && typeof host === "string" ? host.trim() : "") || smtpSettings.host;
+  const activePort = port ? Number(port) : smtpSettings.port;
+  const activeSecure = secure !== undefined ? Boolean(secure) : (smtpSettings.secure || activePort === 465);
+  const activeUser = (user && typeof user === "string" ? user.trim() : "") || smtpSettings.user;
+  const activePass = (pass && pass !== "••••••••••••••••") ? pass.trim() : smtpSettings.pass;
+  const activeFromEmail = (fromEmail && typeof fromEmail === "string" ? fromEmail.trim() : "") || smtpSettings.fromEmail || "solarastra.in@gmail.com";
+  const activeFromName = (fromName && typeof fromName === "string" ? fromName.trim() : "") || smtpSettings.fromName || "WhyOr Dispatch AI";
+  const activeReplyTo = (replyTo && typeof replyTo === "string" ? replyTo.trim() : "") || smtpSettings.replyTo || activeFromEmail;
+
+  const recipientEmail = to || activeFromEmail || "solarastra.in@gmail.com";
   const emailSubject = subject || (
     templateType === 'onboarding_invite'
       ? `[WhyOr Dispatch AI] Welcome to Your Enterprise AI Workspace - Access Credentials & Quota`
@@ -1407,23 +1563,27 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
   } else {
     templateBodyHtml = `
       <p>Hello <strong>${recipientEmail}</strong>,</p>
-      <p>${customMessage || "This is a real-time test notification sent directly from the <strong>WhyOr Dispatch AI Enterprise Admin Console</strong> to confirm SMTP server configuration and email transport readiness."}</p>
+      <p>${customMessage || "This is a real-time trial email sent directly from the <strong>WhyOr Dispatch AI Enterprise Admin Console</strong> to validate your uncommitted SMTP server configuration before writing to Firestore."}</p>
       
       <div class="stat-box">
         <div class="stat-row">
           <span class="stat-label">SMTP Server Host:</span>
-          <span class="stat-val">${smtpSettings.host}:${smtpSettings.port}</span>
+          <span class="stat-val">${activeHost}:${activePort}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Sender Identity:</span>
-          <span class="stat-val">${smtpSettings.fromName} &lt;${smtpSettings.fromEmail}&gt;</span>
+          <span class="stat-val">${activeFromName} &lt;${activeFromEmail}&gt;</span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">Persistence Engine:</span>
-          <span class="stat-val">Firebase Firestore (Cloud Sync Active)</span>
+          <span class="stat-label">Authentication Account:</span>
+          <span class="stat-val">${activeUser || "Anonymous"}</span>
         </div>
         <div class="stat-row">
-          <span class="stat-label">Triggered By:</span>
+          <span class="stat-label">Persistence Target:</span>
+          <span class="stat-val">Firestore (smtp_settings/global_smtp)</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Triggered By SuperAdmin:</span>
           <span class="stat-val">${sentBy}</span>
         </div>
         <div class="stat-row">
@@ -1432,7 +1592,7 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
         </div>
       </div>
 
-      <p style="font-size: 12px; color: #94a3b8;">You can now safely configure automated alerts for <em>Company Onboarding</em>, <em>Subscription Quota Thresholds</em>, and <em>Security Audits</em>.</p>
+      <p style="font-size: 12px; color: #34d399;">✅ <strong>Validation Successful:</strong> This trial email confirms your SMTP host, port, credentials, and TLS security handshake are fully functional. You can safely save this configuration to Firestore.</p>
     `;
   }
 
@@ -1473,27 +1633,30 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
   `;
 
   try {
-    let messageId = `<whyor.${Date.now()}.${Math.random().toString(36).substring(2, 8)}@${smtpSettings.host}>`;
+    let messageId = `<whyor.${Date.now()}.${Math.random().toString(36).substring(2, 8)}@${activeHost}>`;
     let deliveredDirectly = false;
 
-    if (smtpSettings.pass && smtpSettings.user) {
+    if (activePass && activeUser) {
       const transporter = nodemailer.createTransport({
-        host: smtpSettings.host,
-        port: smtpSettings.port,
-        secure: smtpSettings.secure || smtpSettings.port === 465,
+        host: activeHost,
+        port: activePort,
+        secure: activeSecure,
         auth: {
-          user: smtpSettings.user,
-          pass: smtpSettings.pass,
+          user: activeUser,
+          pass: activePass,
         },
         tls: {
           rejectUnauthorized: false,
         },
+        connectionTimeout: 10000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000,
       });
 
       const info = await transporter.sendMail({
-        from: `"${smtpSettings.fromName}" <${smtpSettings.fromEmail}>`,
+        from: `"${activeFromName}" <${activeFromEmail}>`,
         to: recipientEmail,
-        replyTo: smtpSettings.replyTo || smtpSettings.fromEmail,
+        replyTo: activeReplyTo,
         subject: emailSubject,
         html: htmlContent,
       });
@@ -1504,11 +1667,13 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
 
     const durationMs = Date.now() - start;
     smtpSettings.lastTestedAt = new Date().toISOString();
+    smtpSettings.isVerified = true;
+    smtpSettings.lastVerifiedAt = new Date().toISOString();
 
     const newLog = {
       id: `mail_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       to: recipientEmail,
-      from: `${smtpSettings.fromName} <${smtpSettings.fromEmail}>`,
+      from: `${activeFromName} <${activeFromEmail}>`,
       subject: emailSubject,
       emailType: templateType,
       status: "sent" as const,
@@ -1525,16 +1690,18 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
       messageId,
       deliveredDirectly,
       recipient: recipientEmail,
+      host: activeHost,
+      port: activePort,
       durationMs,
       sentAt: newLog.sentAt,
-      message: `Test email dispatched to ${recipientEmail} (${durationMs}ms). Logged to Admin Ledger.`,
+      message: `Trial email dispatched to ${recipientEmail} (${durationMs}ms). Configuration validated and ready to save to Firestore.`,
       log: newLog,
     });
   } catch (err: any) {
     const failedLog = {
       id: `mail_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       to: recipientEmail,
-      from: `${smtpSettings.fromName} <${smtpSettings.fromEmail}>`,
+      from: `${activeFromName} <${activeFromEmail}>`,
       subject: emailSubject,
       emailType: templateType,
       status: "failed" as const,
@@ -1544,11 +1711,12 @@ app.post("/api/admin/smtp/send-test", async (req, res) => {
     };
     emailLogs.unshift(failedLog);
 
-    res.status(500).json({
+    res.status(400).json({
       success: false,
-      error: err.message || "Failed to dispatch email",
+      error: err.message || "Failed to send email through SMTP transport",
       recipient: recipientEmail,
-      recommendation: "Check SMTP password or App Password for your mail provider.",
+      recommendation: "Ensure SMTP port (587 or 465), host, and credentials (e.g. Gmail 16-character App Password) are correct.",
+      log: failedLog,
     });
   }
 });
