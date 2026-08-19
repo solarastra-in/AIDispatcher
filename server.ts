@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { INITIAL_AI_MODELS } from "./src/data/mockData";
+import { firebaseAuthMiddleware } from "./src/server/firebaseAuth";
 import {
   PROVIDER_CAPABILITIES,
   verifyLocalProxy,
@@ -14,20 +15,59 @@ import {
   type AuthMethod,
 } from "./src/server/localProxyAdapter";
 import {
-  getPlatformAssistantConfig,
-  setPlatformAssistantConfig,
-} from "./src/server/platformAssistant";
-import { redraftPrompt } from "./src/server/promptRedraft";
+  resolveAuthenticatedEmail,
+  isSuperAdminEmail,
+  isCompanyAdmin,
+  isSuperAdminOrCompanyAdmin,
+  canViewSuperAdminConsole,
+  canViewCompanyAdminConsole,
+} from "./src/server/authGate";
 import {
+  companies,
+  teams,
+  users,
+  createUser,
+  getUserByEmail,
+  type Company,
+  type Team,
+  type UserAccount,
+} from "./src/server/orgModel";
+import { computeModelAvailability } from "./src/server/modelAvailability";
+import { checkBudget, recordUsage, setBudget, resetBudgetPeriod } from "./src/server/budgetEnforcement";
+import {
+  createChatSession,
+  getChatSession,
+  listChatSessionsForUser,
+  appendMessage,
+  verifySessionOwnership,
+} from "./src/server/chatSessions";
+import {
+  previewContext,
   recordTurnAndMaybeCompress,
   buildCompressedPrompt,
   getSessionCompressionStats,
 } from "./src/server/contextCompressor";
+import {
+  getPlatformAssistantConfig,
+  setPortalDefaultAssistantConfig,
+  setCompanyAssistantOverride,
+  clearCompanyAssistantOverride,
+} from "./src/server/platformAssistant";
+import { redraftPrompt } from "./src/server/promptRedraft";
+import { generatePdf, generateXlsx, extractMarkdownTables, generateImageViaProvider } from "./src/server/outputGeneration";
+import { classifyArchetype } from "./src/server/taskArchetype";
+import { recordUsageEvent, aggregateUsageByArchetype } from "./src/server/usageAggregation";
+import { setCapabilitySeed, listCapabilitySeeds, buildCapabilityChecks } from "./src/server/openModelCapabilitySeed";
+import { analyzeSelfHostViability } from "./src/server/selfHostAnalysis";
+import { runCorroboration, assessPairDiversity } from "./src/server/corroborationOrchestrator";
+import { runRelay } from "./src/server/relay";
+import { buildMultimodalContent } from "./src/server/multimodalInput";
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
+app.use(firebaseAuthMiddleware);
 
 // ==================== SMTP EMAIL SERVICE STATE ====================
 export interface ServerSmtpSettings {
@@ -1126,7 +1166,7 @@ app.post("/api/admin/settings/platform-assistant", (req, res) => {
   if (!PROVIDER_CAPABILITIES[provider]) {
     return res.status(400).json({ error: `Unknown provider '${provider}'` });
   }
-  const updated = setPlatformAssistantConfig(
+  const updated = setPortalDefaultAssistantConfig(
     { provider, modelId, useLocalProxyIfAvailable, maxUtilityTokens },
     adminId || "unknown_admin"
   );
@@ -2724,6 +2764,446 @@ function generateSimulatedResponse(prompt: string, category: string, modelName: 
   }
   return `### Dispatch Output generated via ${modelName}\n\n**Key Findings & Synthesis:**\n- Structured context has been parsed and logged to the portable Context Ledger.\n- All critical entities and constraint parameters have been preserved across model boundaries.\n- Analysis completed successfully with optimal token efficiency and zero hallucination risk.`;
 }
+
+// ==================== INTEGRATED ENTERPRISE & DISPATCH ROUTES ====================
+
+// 1. Live Model Availability Matrix
+app.get("/api/models/available", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const user = email ? getUserByEmail(email) : undefined;
+  const team = (user && user.teamId) ? (teams[user.teamId] || null) : null;
+
+  const mimeTypes = typeof req.query.mimeTypes === "string" 
+    ? req.query.mimeTypes.split(",").map(s => s.trim()).filter(Boolean) 
+    : [];
+
+  const availability = computeModelAvailability({
+    catalog: catalogModels as any,
+    uploadedFileMimeTypes: mimeTypes,
+    team: team || null,
+    hasConfiguredCredential: (provider: string) => {
+      const cred = companyCredentialsVault[provider];
+      return !!(cred?.apiKey || cred?.localProxyUrl || cred?.hasSubscription);
+    },
+  });
+
+  res.json({ availability, catalog: catalogModels });
+});
+
+// 2. Chat Sessions Management
+app.get("/api/sessions", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  let user = getUserByEmail(email);
+  if (!user) {
+    user = createUser({
+      email,
+      role: isSuperAdminEmail(email) ? "super_admin" : "team_member",
+      companyId: null,
+      teamId: null,
+      privileges: { canSelectModel: true },
+      createdByUserId: null,
+    });
+  }
+  const list = listChatSessionsForUser(user.id);
+  res.json(list);
+});
+
+app.post("/api/sessions", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  let user = getUserByEmail(email);
+  if (!user) {
+    user = createUser({
+      email,
+      role: isSuperAdminEmail(email) ? "super_admin" : "team_member",
+      companyId: null,
+      teamId: null,
+      privileges: { canSelectModel: true },
+      createdByUserId: null,
+    });
+  }
+  const session = createChatSession(user.id);
+  if (req.body.title) {
+    session.title = req.body.title;
+  }
+  res.status(201).json(session);
+});
+
+app.get("/api/sessions/:id", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const user = getUserByEmail(email);
+  const session = getChatSession(req.params.id);
+  if (!session) return res.status(404).json({ error: "Session not found" });
+  if (user && session.userId !== user.id && !isSuperAdminEmail(email)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  res.json(session);
+});
+
+// 3. Context Compression Preview
+app.get("/api/chat/:sessionId/preview-context", (req, res) => {
+  const preview = previewContext(req.params.sessionId);
+  res.json(preview);
+});
+
+// 4. Dispatch Output (Multimodal, Formatting, Artifacts, Budgeting)
+app.post("/api/dispatch/output", async (req, res) => {
+  const { prompt, provider = "google", modelId = "gemini-2.5-flash", outputFormat = "auto", sessionId, files = [] } = req.body;
+  const email = resolveAuthenticatedEmail(req);
+  const user = email ? getUserByEmail(email) : undefined;
+  
+  if (user) {
+    const budgetCheck = checkBudget(user.id, user.teamId);
+    if (!budgetCheck.allowed) {
+      return res.status(402).json({ error: `Budget exceeded: ${budgetCheck.reason}` });
+    }
+  }
+
+  try {
+    let effectivePrompt = prompt;
+    const providerCaller = async (p: string, m: string, text: string) => {
+      const direct = await callDirectProviderAPI(p, m, text);
+      const estCost = (direct.inputTokens * 0.00000015 + direct.outputTokens * 0.0000006) || 0.0005;
+      return {
+        text: direct.text,
+        inputTokens: direct.inputTokens,
+        outputTokens: direct.outputTokens,
+        latencyMs: direct.latencyMs,
+        costUsd: estCost,
+      };
+    };
+
+    if (sessionId) {
+      await recordTurnAndMaybeCompress(
+        sessionId,
+        { role: "user", content: prompt },
+        providerCaller,
+        user?.companyId
+      );
+      effectivePrompt = buildCompressedPrompt(sessionId, prompt);
+    }
+
+    let completionText = "";
+    if (files && files.length > 0) {
+      const parts = buildMultimodalContent(provider, effectivePrompt, files);
+      const gemini = getGemini();
+      if (gemini && provider === "google") {
+        const genRes = await gemini.models.generateContent({
+          model: modelId.includes("gemini") ? modelId : "gemini-2.5-flash",
+          contents: parts as any,
+        });
+        completionText = genRes.text || "";
+      } else {
+        completionText = `Analysis of attached file (${files.length} file(s)):\n\n${generateSimulatedResponse(effectivePrompt, "deep_synthesis", modelId)}`;
+      }
+    } else {
+      const directResult = await callDirectProviderAPI(provider, modelId, effectivePrompt);
+      completionText = directResult.text;
+    }
+
+    if (sessionId) {
+      await recordTurnAndMaybeCompress(
+        sessionId,
+        { role: "assistant", content: completionText },
+        providerCaller,
+        user?.companyId
+      );
+      appendMessage(sessionId, { role: "user", content: prompt });
+      appendMessage(sessionId, { role: "assistant", content: completionText });
+    }
+
+    if (user) {
+      const estimatedCost = 0.0005;
+      recordUsage(user.id, user.teamId, 1000, estimatedCost);
+      recordUsageEvent({
+        prompt: effectivePrompt,
+        modelId,
+        provider,
+        inputTokens: 500,
+        outputTokens: 500,
+        costUsd: estimatedCost,
+        qualityMet: true,
+        companyId: user.companyId,
+        userId: user.id,
+      });
+    }
+
+    let chosenFormat = outputFormat;
+    if (chosenFormat === "auto") {
+      if (prompt.toLowerCase().includes("pdf") || prompt.toLowerCase().includes("document")) chosenFormat = "pdf";
+      else if (prompt.toLowerCase().includes("spreadsheet") || prompt.toLowerCase().includes("excel") || prompt.toLowerCase().includes("csv") || prompt.toLowerCase().includes("table")) chosenFormat = "xlsx";
+      else if (prompt.toLowerCase().includes("generate image") || prompt.toLowerCase().includes("draw a picture")) chosenFormat = "image";
+      else chosenFormat = "text";
+    }
+
+    if (chosenFormat === "pdf") {
+      const pdfBuf = await generatePdf("WhyOr Dispatch Report", completionText);
+      return res.json({
+        format: "pdf",
+        fileName: "dispatch-output.pdf",
+        mimeType: "application/pdf",
+        base64Data: pdfBuf.toString("base64"),
+        text: completionText,
+      });
+    }
+
+    if (chosenFormat === "xlsx") {
+      const tables = extractMarkdownTables(completionText);
+      const xlsxBuf = await generateXlsx(tables.length > 0 ? tables : [{ sheetName: "Sheet1", headers: ["Output"], rows: [[completionText]] }]);
+      return res.json({
+        format: "xlsx",
+        fileName: "dispatch-table.xlsx",
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        base64Data: xlsxBuf.toString("base64"),
+        text: completionText,
+      });
+    }
+
+    if (chosenFormat === "image") {
+      const cred = companyCredentialsVault[provider];
+      const key = cred?.apiKey || process.env.GEMINI_API_KEY || "";
+      const imgRes = await generateImageViaProvider(prompt, provider === "openai" ? "openai" : "google", key);
+      return res.json({
+        format: "image",
+        fileName: "dispatch-image.png",
+        mimeType: imgRes.mimeType,
+        base64Data: imgRes.buffer.toString("base64"),
+        text: completionText,
+      });
+    }
+
+    return res.json({ format: "text", text: completionText });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Dispatch output execution failed" });
+  }
+});
+
+// 5. Corroboration & Diversity
+app.post("/api/corroborate", async (req, res) => {
+  const { prompt, modelA, modelB } = req.body;
+  if (!prompt || !modelA || !modelB) {
+    return res.status(400).json({ error: "prompt, modelA, and modelB are required" });
+  }
+  try {
+    const caller = async (p: string, m: string, text: string) => {
+      const result = await callDirectProviderAPI(p, m, text);
+      const estCost = (result.inputTokens * 0.00000015 + result.outputTokens * 0.0000006) || 0.0005;
+      return {
+        text: result.text,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        costUsd: estCost,
+      };
+    };
+    const result = await runCorroboration({ prompt, modelA, modelB }, caller);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Corroboration failed" });
+  }
+});
+
+app.get("/api/corroborate/diversity", (req, res) => {
+  const { providerA, providerB } = req.query as Record<string, string>;
+  if (!providerA || !providerB) {
+    return res.status(400).json({ error: "providerA, providerB required" });
+  }
+  const score = assessPairDiversity({ provider: providerA }, { provider: providerB });
+  res.json(score);
+});
+
+// 6. Multi-Model Relay
+app.post("/api/relay", async (req, res) => {
+  const { prompt, steps, data } = req.body;
+  if (!prompt || !Array.isArray(steps) || steps.length === 0) {
+    return res.status(400).json({ error: "prompt and steps array are required" });
+  }
+  try {
+    const caller = async (p: string, m: string, text: string) => {
+      const result = await callDirectProviderAPI(p, m, text);
+      const estCost = (result.inputTokens * 0.00000015 + result.outputTokens * 0.0000006) || 0.0005;
+      return {
+        text: result.text,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        costUsd: estCost,
+      };
+    };
+    const result = await runRelay(data || prompt, prompt, steps, caller);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Relay execution failed" });
+  }
+});
+
+// 7. Self-Host ROI & Viability Analysis
+app.post("/api/admin/self-host/analyze", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const user = email ? getUserByEmail(email) : undefined;
+  const companyId = req.body.companyId || user?.companyId || "company_default";
+  const periodDays = Number(req.body.periodDays) || 30;
+  const qualityThreshold = Number(req.body.qualityBarThreshold) || 0.8;
+  const { usage } = aggregateUsageByArchetype(companyId, periodDays);
+  const checks = buildCapabilityChecks(qualityThreshold);
+  const analysis = analyzeSelfHostViability(usage, checks, periodDays);
+  res.json(analysis);
+});
+
+// 8. Open Models Capability Seeds & Usage Aggregation
+app.get("/api/admin/open-models/seeds", (req, res) => {
+  res.json(listCapabilitySeeds());
+});
+
+app.post("/api/admin/open-models/seeds", (req, res) => {
+  const { archetypeId, modelId, qualityEstimate, note } = req.body;
+  const email = resolveAuthenticatedEmail(req);
+  if (!archetypeId || !modelId || qualityEstimate === undefined) {
+    return res.status(400).json({ error: "archetypeId, modelId, qualityEstimate required" });
+  }
+  try {
+    const entry = setCapabilitySeed(archetypeId, modelId, Number(qualityEstimate), email || "admin", note || "Manual seed");
+    res.json(entry);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/admin/usage/archetypes", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const user = email ? getUserByEmail(email) : undefined;
+  const companyId = (req.query.companyId as string) || user?.companyId || "company_default";
+  const periodDays = Number(req.query.periodDays) || 30;
+  const agg = aggregateUsageByArchetype(companyId, periodDays);
+  res.json(agg);
+});
+
+// 9. Organization Admin Endpoints (Companies, Teams, Users, Budgets, Assistant Overrides)
+app.get("/api/admin/companies", (req, res) => {
+  res.json(Object.values(companies));
+});
+
+app.post("/api/admin/companies", (req, res) => {
+  const { name, ssoDomain, seededGmailAddresses } = req.body;
+  const email = resolveAuthenticatedEmail(req);
+  if (!name) return res.status(400).json({ error: "Company name is required" });
+  const id = `cmp_${Date.now().toString(36)}`;
+  const company: Company = {
+    id,
+    name,
+    ssoDomain: ssoDomain || undefined,
+    seededGmailAddresses: Array.isArray(seededGmailAddresses) ? seededGmailAddresses : [],
+    createdAt: new Date().toISOString(),
+    createdByUserId: email || "super_admin",
+  };
+  companies[id] = company;
+  res.status(201).json(company);
+});
+
+app.get("/api/admin/companies/:id", (req, res) => {
+  const comp = companies[req.params.id];
+  if (!comp) return res.status(404).json({ error: "Company not found" });
+  res.json(comp);
+});
+
+app.patch("/api/admin/companies/:id", (req, res) => {
+  const comp = companies[req.params.id];
+  if (!comp) return res.status(404).json({ error: "Company not found" });
+  Object.assign(comp, req.body);
+  res.json(comp);
+});
+
+app.get("/api/admin/teams", (req, res) => {
+  const companyId = req.query.companyId as string;
+  let list = Object.values(teams);
+  if (companyId) list = list.filter((t) => t.companyId === companyId);
+  res.json(list);
+});
+
+app.post("/api/admin/teams", (req, res) => {
+  const { name, companyId, allowedModelIds } = req.body;
+  if (!name || !companyId) return res.status(400).json({ error: "name and companyId required" });
+  const id = `team_${Date.now().toString(36)}`;
+  const team: Team = {
+    id,
+    companyId,
+    name,
+    allowedModelIds: Array.isArray(allowedModelIds) ? allowedModelIds : null,
+    createdAt: new Date().toISOString(),
+  };
+  teams[id] = team;
+  res.status(201).json(team);
+});
+
+app.get("/api/admin/users", (req, res) => {
+  const companyId = req.query.companyId as string;
+  let list = Object.values(users);
+  if (companyId) list = list.filter((u) => u.companyId === companyId);
+  res.json(list);
+});
+
+app.post("/api/admin/users", (req, res) => {
+  const { email, role, companyId, teamId, privileges } = req.body;
+  const adminEmail = resolveAuthenticatedEmail(req);
+  if (!email) return res.status(400).json({ error: "email required" });
+  const user = createUser({
+    email,
+    role: (role as any) || "team_member",
+    companyId: companyId || null,
+    teamId: teamId || null,
+    privileges: privileges || { canSelectModel: true },
+    createdByUserId: adminEmail || null,
+  });
+  res.status(201).json(user);
+});
+
+app.get("/api/admin/budgets/:scope/:id", (req, res) => {
+  const { scope, id } = req.params;
+  const budget = checkBudget(
+    scope === "user" ? id : "none",
+    scope === "team" ? id : null
+  );
+  res.json(budget);
+});
+
+app.post("/api/admin/budgets/:scope/:id", (req, res) => {
+  const { scope, id } = req.params;
+  const { tokenLimit, costLimitUsd } = req.body;
+  const b = setBudget(scope as "user" | "team", id, tokenLimit ?? null, costLimitUsd ?? null);
+  res.json(b);
+});
+
+app.post("/api/admin/budgets/:scope/:id/reset", (req, res) => {
+  const { scope, id } = req.params;
+  const b = resetBudgetPeriod(scope as "user" | "team", id);
+  res.json(b);
+});
+
+app.get("/api/admin/assistant/company/:companyId", (req, res) => {
+  const config = getPlatformAssistantConfig(req.params.companyId);
+  res.json(config);
+});
+
+app.post("/api/admin/assistant/company/:companyId", (req, res) => {
+  const { provider, modelId, useLocalProxyIfAvailable, maxUtilityTokens } = req.body;
+  const email = resolveAuthenticatedEmail(req);
+  const updated = setCompanyAssistantOverride(
+    req.params.companyId,
+    {
+      provider,
+      modelId,
+      useLocalProxyIfAvailable,
+      maxUtilityTokens,
+    },
+    email || "admin"
+  );
+  res.json(updated);
+});
+
+app.delete("/api/admin/assistant/company/:companyId", (req, res) => {
+  clearCompanyAssistantOverride(req.params.companyId);
+  res.json({ success: true, message: "Company override removed, reverting to portal default." });
+});
 
 // ----------------------------------------------------
 // VITE MIDDLEWARE & SERVER STARTUP

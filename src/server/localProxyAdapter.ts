@@ -1,23 +1,3 @@
-/**
- * src/server/localProxyAdapter.ts
- *
- * Hermes-Agent-parity capability layer: every provider can be reached via
- * an API key, a user-run local subscription proxy, or both — matching
- * `hermes proxy`'s actual scope (local, single-user, opt-in), NOT the
- * removed fabricated "unified subscription gateway."
- *
- * Hard rule this module enforces in code, not just in comments:
- * WhyOr's servers NEVER perform OAuth login to a consumer AI subscription
- * on a user's behalf, for any provider. A "local proxy" is a URL the user
- * supplies after authenticating on THEIR OWN machine (e.g. running
- * `claude -p` behind a local OpenAI-compatible wrapper, or `hermes proxy`,
- * or the Codex CLI's own OAuth). This module only ever calls a URL the
- * user gave us — it never stores, requests, or brokers a subscription
- * credential itself.
- *
- * Per-provider capability matrix:
- */
-
 export type AuthMethod = "api_key" | "local_proxy" | "both";
 
 export interface ProviderCapability {
@@ -47,7 +27,8 @@ export const PROVIDER_CAPABILITIES: Record<string, ProviderCapability> = {
     localProxySupported: true,
     localProxyNotes:
       "User authenticates the Codex CLI locally under their own ChatGPT " +
-      "Plus/Pro subscription and supplies the resulting local proxy URL.",
+      "Plus/Pro subscription and supplies the resulting local proxy URL. " +
+      "Re-verify current OpenAI terms before enabling this in production.",
   },
   google: {
     provider: "google",
@@ -84,17 +65,13 @@ export const PROVIDER_CAPABILITIES: Record<string, ProviderCapability> = {
 export interface LocalProxyCredential {
   provider: string;
   authMethod: AuthMethod;
-  localProxyUrl?: string;            // e.g. "http://localhost:11500/v1" — supplied by user
-  localProxyLastVerifiedAt?: string; // ONLY set after a real, successful live check
-  localProxyLatencyMs?: number;      // measured from real check
-  localProxyModelsDetected?: string[]; // parsed from real /models response
-  scope: "individual_user_only";     // structural guard
+  localProxyUrl?: string;
+  localProxyLastVerifiedAt?: string;
+  localProxyLatencyMs?: number;
+  localProxyModelsDetected?: string[];
+  scope: "individual_user_only";
 }
 
-/**
- * Real, live verification — performs an actual network call to the URL
- * the user supplied and only marks the credential verified if that call succeeds.
- */
 export async function verifyLocalProxy(
   provider: string,
   localProxyUrl: string,
@@ -129,9 +106,6 @@ export async function verifyLocalProxy(
   }
 }
 
-/**
- * Real completion call through a user-owned local proxy.
- */
 export async function callViaLocalProxy(
   localProxyUrl: string,
   modelId: string,
@@ -162,11 +136,6 @@ export async function callViaLocalProxy(
   };
 }
 
-/**
- * Structural guard: a local-proxy credential belongs to exactly one
- * individual user's machine and subscription. It must never be attached
- * to a Team-pooled routing config or served to Guest traffic.
- */
 export function isEligibleForLocalProxyRouting(personaType: "guest" | "user" | "team_member" | "team_admin" | "platform_admin"): boolean {
   return personaType === "user";
 }

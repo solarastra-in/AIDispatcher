@@ -19,7 +19,8 @@ import {
   KeyRound,
   LogIn,
   LogOut,
-  UserCheck
+  UserCheck,
+  MessageSquare
 } from 'lucide-react';
 import { auth, signInWithGoogle, signOutUser, onAuthChanged } from '../lib/firebase';
 import { User } from 'firebase/auth';
@@ -57,6 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const navItems = [
     { id: 'dispatch', label: 'Dispatch Console', icon: Cpu },
+    { id: 'workspace', label: 'Chat Workspace', icon: MessageSquare, badge: 'Interactive' },
     { id: 'credentials', label: 'Company BYOK', icon: KeyRound, badge: 'Direct' },
     { id: 'analytics', label: 'Savings & Trends', icon: BarChart3 },
     { id: 'ledger', label: 'Context Ledger', icon: Database },

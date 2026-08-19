@@ -12,6 +12,7 @@ import { SavingsAnalyticsDashboard } from './components/SavingsAnalyticsDashboar
 import { CompanyCredentialsPage } from './components/CompanyCredentialsPage';
 import { ApiExplorerModal } from './components/ApiExplorerModal';
 import { QualityModelInspector } from './components/QualityModelInspector';
+import Workspace from './pages/Workspace';
 import { AIModel, UserPersona, ContextLedgerEntry } from './types';
 import { INITIAL_AI_MODELS, PERSONA_PROFILES } from './data/mockData';
 import { apiService } from './core/apiSurface';
@@ -236,6 +237,12 @@ export default function App() {
               setPrefilledModelId(undefined);
             }}
           />
+        )}
+
+        {currentTab === 'workspace' && (
+          <div className="h-[calc(100vh-4rem)]">
+            <Workspace />
+          </div>
         )}
 
         {currentTab === 'credentials' && (

@@ -1,16 +1,3 @@
-/**
- * src/components/ProviderConnectPanel.tsx
- *
- * Renders a "Connect [Provider]" card per provider, driven entirely by
- * GET /api/providers/connect-flows — no hardcoded per-provider UI logic,
- * so a new provider added to PROVIDER_CAPABILITIES shows up here
- * automatically. Two paths per card:
- *   - API key providers: a masked input + Save.
- *   - Local-proxy-capable providers (Anthropic, OpenAI): numbered setup
- *     steps pointing at the downloadable wrapper script, plus a URL input
- *     that only saves after a REAL verify call succeeds — never marks
- *     "connected" optimistically.
- */
 import React, { useEffect, useState } from "react";
 
 interface ConnectFlow {
@@ -56,7 +43,7 @@ export default function ProviderConnectPanel() {
   );
 }
 
-const ProviderCard: React.FC<{ flow: ConnectFlow; onSaved: () => void | Promise<void> }> = ({ flow, onSaved }) => {
+const ProviderCard: React.FC<{ flow: ConnectFlow; onSaved: () => void }> = ({ flow, onSaved }) => {
   const [mode, setMode] = useState<"api_key" | "local_proxy">(
     flow.currentStatus.hasVerifiedLocalProxy ? "local_proxy" : "api_key"
   );
@@ -115,13 +102,13 @@ const ProviderCard: React.FC<{ flow: ConnectFlow; onSaved: () => void | Promise<
         <div className="flex gap-2 mb-4 text-xs">
           <button
             onClick={() => setMode("api_key")}
-            className={`px-3 py-1.5 rounded ${mode === "api_key" ? "bg-[#FF8A3D] text-[#171208]" : "bg-[#1D222A] text-[#93999F]"}`}
+            className={`px-3 py-1.5 rounded cursor-pointer ${mode === "api_key" ? "bg-[#FF8A3D] text-[#171208]" : "bg-[#1D222A] text-[#93999F]"}`}
           >
             API key
           </button>
           <button
             onClick={() => setMode("local_proxy")}
-            className={`px-3 py-1.5 rounded ${mode === "local_proxy" ? "bg-[#FF8A3D] text-[#171208]" : "bg-[#1D222A] text-[#93999F]"}`}
+            className={`px-3 py-1.5 rounded cursor-pointer ${mode === "local_proxy" ? "bg-[#FF8A3D] text-[#171208]" : "bg-[#1D222A] text-[#93999F]"}`}
           >
             Local subscription proxy ($0/token)
           </button>
@@ -137,7 +124,7 @@ const ProviderCard: React.FC<{ flow: ConnectFlow; onSaved: () => void | Promise<
             onChange={(e) => setApiKeyInput(e.target.value)}
             className="flex-1 bg-[#1D222A] border border-[#2A2F38] rounded px-3 py-2 text-sm font-mono"
           />
-          <button onClick={saveApiKey} disabled={!apiKeyInput} className="px-4 py-2 bg-[#FF8A3D] text-[#171208] rounded text-sm font-medium disabled:opacity-40">
+          <button onClick={saveApiKey} disabled={!apiKeyInput} className="px-4 py-2 bg-[#FF8A3D] text-[#171208] rounded text-sm font-medium disabled:opacity-40 cursor-pointer">
             Save
           </button>
         </div>
@@ -161,7 +148,7 @@ const ProviderCard: React.FC<{ flow: ConnectFlow; onSaved: () => void | Promise<
             <button
               onClick={verifyLocalProxy}
               disabled={!proxyUrlInput || verifying}
-              className="px-4 py-2 bg-[#FF8A3D] text-[#171208] rounded text-sm font-medium disabled:opacity-40"
+              className="px-4 py-2 bg-[#FF8A3D] text-[#171208] rounded text-sm font-medium disabled:opacity-40 cursor-pointer"
             >
               {verifying ? "Verifying…" : "Verify & connect"}
             </button>
