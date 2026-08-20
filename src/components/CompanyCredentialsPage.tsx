@@ -67,10 +67,10 @@ const PROVIDER_METAS: ProviderConfigMeta[] = [
     category: 'Frontier Reasoning',
     logoColor: 'from-blue-500 to-cyan-400',
     supportedModels: [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', tier: 'Low / Fast' },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', tier: 'Frontier' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', tier: 'Low / Real-Time' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', tier: 'Frontier Long-Context' },
+      { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash', tier: 'Low / Fast Hybrid' },
+      { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', tier: 'Low / Ultra-Fast' },
+      { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview', tier: 'Frontier Reasoning' },
+      { id: 'gemini-flash-latest', name: 'Gemini Flash (Latest)', tier: 'Standard Fast' },
     ],
     keyPlaceholder: 'AIzaSy...',
     keyPrefix: 'AIzaSy',
@@ -213,9 +213,7 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
   const [testProvider, setTestProvider] = useState<AIProvider>('anthropic');
   const [testModelId, setTestModelId] = useState<string>('claude-3-7-sonnet-20250219');
   const [testAuthMode, setTestAuthMode] = useState<'auto' | 'subscription' | 'api_key'>('auto');
-  const [testPrompt, setTestPrompt] = useState<string>(
-    'Synthesize a 3-tier microservice architecture for token optimization and verify live execution latency.'
-  );
+  const [testPrompt, setTestPrompt] = useState<string>('');
   const [isExecutingTest, setIsExecutingTest] = useState<boolean>(false);
   const [testResponse, setTestResponse] = useState<any>(null);
 
@@ -807,18 +805,25 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-3 self-end sm:self-center">
-                      {cred?.hasSubscription && (
+                    <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
+                      {cred?.hasSubscription && !cred?.hasKey && (
                         <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/90 text-emerald-300 border border-emerald-800/80">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>Flat Subscription ($0.00/tok)</span>
+                          <span>Subscription Active ({cred?.subscriptionTier ? cred.subscriptionTier.split('(')[0].trim() : 'Flat Plan'})</span>
                         </div>
                       )}
 
                       {cred?.hasKey && !cred?.hasSubscription && (
                         <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-indigo-950/90 text-indigo-300 border border-indigo-800/80">
                           <Key className="w-3 h-3 text-indigo-400" />
-                          <span>API Key Configured</span>
+                          <span>Direct API Key Configured</span>
+                        </div>
+                      )}
+
+                      {cred?.hasSubscription && cred?.hasKey && (
+                        <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-950/90 text-amber-300 border border-amber-800/80">
+                          <Sparkles className="w-3 h-3 text-amber-400" />
+                          <span>Dual Configured: Subscription & API Key</span>
                         </div>
                       )}
 
@@ -869,75 +874,98 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
                       {/* MODE 1: Flat-Rate Subscription & OAuth */}
                       {currentMode === 'subscription' && meta.subscriptionAvailable && (
                         <div className="space-y-5">
-                          <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div>
-                                <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                                  <span>Active Subscription Tier:</span>
-                                  <span className="text-indigo-400 font-mono">
-                                    {cred?.subscriptionTier || meta.subscriptionTiers[0]}
-                                  </span>
+                          {cred?.hasSubscription ? (
+                            <div className="p-4 bg-slate-900/90 rounded-xl border border-emerald-800/60 space-y-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                    <span>Active Subscription Tier:</span>
+                                    <span className="text-emerald-400 font-mono">
+                                      {cred?.subscriptionTier || meta.subscriptionTiers[0]}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
+                                    <span>Account: <strong className="text-slate-300">{cred?.subscriptionEmail || profile?.primaryContactEmail || 'Connected'}</strong></span>
+                                    <span>•</span>
+                                    <span className="text-emerald-400">Flat Rate $0.00/token</span>
+                                  </div>
                                 </div>
-                                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
-                                  <span>Account: <strong className="text-slate-300">{cred?.subscriptionEmail || profile?.primaryContactEmail || 'solarastra.in@gmail.com'}</strong></span>
-                                  <span>•</span>
-                                  <span className="text-emerald-400">Bypass Token Rate Limits</span>
-                                </div>
-                              </div>
 
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => setOauthModalProvider(meta.id)}
-                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-xs flex items-center space-x-1.5 transition-all shadow-sm"
-                                >
-                                  <Globe className="w-3.5 h-3.5" />
-                                  <span>{cred?.hasSubscription ? 'Re-link Google Auth' : 'Link Subscription'}</span>
-                                </button>
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => setOauthModalProvider(meta.id)}
+                                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-xs flex items-center space-x-1.5 transition-all shadow-sm"
+                                  >
+                                    <Globe className="w-3.5 h-3.5" />
+                                    <span>Re-authenticate</span>
+                                  </button>
 
-                                {cred?.hasSubscription && (
                                   <button
                                     onClick={() => handleDisconnectSubscription(meta.id)}
                                     className="px-3 py-1.5 bg-slate-800 hover:bg-rose-950/80 hover:text-rose-400 text-slate-400 rounded-lg text-xs transition-colors border border-slate-700"
                                   >
                                     Unlink
                                   </button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Local Proxy Info */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
-                              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 flex items-center justify-between">
-                                <div>
-                                  <span className="text-slate-400">Local Proxy Bridge:</span>
-                                  <div className="font-mono text-emerald-400 mt-0.5">{cred?.localProxyUrl || `http://localhost:808${meta.id === 'google' ? '1' : meta.id === 'openai' ? '2' : '3'}/v1`}</div>
                                 </div>
-                                <button
-                                  onClick={() => handleToggleProxy(meta.id)}
-                                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[11px]"
-                                >
-                                  {cred?.proxyStatus === 'running' ? 'Active' : 'Start'}
-                                </button>
                               </div>
 
-                              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 flex items-center justify-between">
-                                <div>
-                                  <span className="text-slate-400">Connection Status:</span>
-                                  <div className="text-slate-200 mt-0.5 flex items-center gap-1.5">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                                    <span>Verified ({cred?.latencyMs || 180}ms)</span>
+                              {/* Local Proxy Info */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
+                                <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 flex items-center justify-between">
+                                  <div>
+                                    <span className="text-slate-400">Local Proxy Bridge:</span>
+                                    <div className="font-mono text-emerald-400 mt-0.5">{cred?.localProxyUrl || `http://localhost:808${meta.id === 'google' ? '1' : meta.id === 'openai' ? '2' : '3'}/v1`}</div>
                                   </div>
+                                  <button
+                                    onClick={() => handleToggleProxy(meta.id)}
+                                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[11px]"
+                                  >
+                                    {cred?.proxyStatus === 'running' ? 'Active' : 'Start'}
+                                  </button>
                                 </div>
+
+                                <div className="p-3 bg-slate-950 rounded-lg border border-slate-800/80 flex items-center justify-between">
+                                  <div>
+                                    <span className="text-slate-400">Connection Status:</span>
+                                    <div className="text-slate-200 mt-0.5 flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                      <span>Verified ({cred?.latencyMs || 180}ms)</span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleVerify(meta.id, 'subscription')}
+                                    disabled={verifyingProvider === meta.id}
+                                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+                                  >
+                                    {verifyingProvider === meta.id ? 'Pinging...' : 'Ping Test'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-5 bg-slate-900/90 rounded-xl border border-slate-800 space-y-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                  <div className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-slate-600" />
+                                    <span>No Subscription Linked for {meta.name}</span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 mt-1 max-w-xl">
+                                    Link your consumer or team subscription (<span className="text-indigo-300">{meta.subscriptionTiers.join(' / ')}</span>) to route inference via local session proxy at <strong>$0.00 per-token rate</strong>.
+                                  </p>
+                                </div>
+
                                 <button
-                                  onClick={() => handleVerify(meta.id, 'subscription')}
-                                  disabled={verifyingProvider === meta.id}
-                                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+                                  onClick={() => setOauthModalProvider(meta.id)}
+                                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs flex items-center space-x-2 transition-all shadow-md shrink-0"
                                 >
-                                  {verifyingProvider === meta.id ? 'Pinging...' : 'Ping Test'}
+                                  <Globe className="w-4 h-4" />
+                                  <span>Link {meta.name} Subscription</span>
                                 </button>
                               </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
 
@@ -1086,12 +1114,20 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
 
             <div className="lg:col-span-2 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Test Prompt</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">Sandbox Test Payload</label>
+                  <span className="text-[11px] font-mono text-slate-500">{testPrompt.length} chars</span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+                  <span className="font-semibold text-indigo-400 font-mono">What goes in this box:</span> Enter any sample question, code refactor instruction, or test query to benchmark live response latency, token consumption, and model outputs directly through this provider's verified credentials.
+                </div>
+
                 <textarea
                   rows={4}
                   value={testPrompt}
                   onChange={(e) => setTestPrompt(e.target.value)}
-                  placeholder="Enter test prompt..."
+                  placeholder="Enter test prompt or payload... (e.g. Synthesize a 3-tier microservice architecture for token optimization and verify live execution latency)"
                   className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500 resize-none"
                 />
               </div>

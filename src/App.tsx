@@ -13,6 +13,7 @@ import { CompanyCredentialsPage } from './components/CompanyCredentialsPage';
 import { ApiExplorerModal } from './components/ApiExplorerModal';
 import { QualityModelInspector } from './components/QualityModelInspector';
 import { TrialProgressBarHeader } from './components/TrialProgressBarHeader';
+import { AuthGateModal } from './components/AuthGateModal';
 import Workspace from './pages/Workspace';
 import Home from './pages/Home';
 import { PricingPage } from './pages/PricingPage';
@@ -37,12 +38,47 @@ export default function App() {
   const [prefilledModelId, setPrefilledModelId] = useState<string | undefined>(undefined);
   const [isApiExplorerOpen, setIsApiExplorerOpen] = useState<boolean>(false);
   const [isQualityInspectorOpen, setIsQualityInspectorOpen] = useState<boolean>(false);
+  const [isAuthGateOpen, setIsAuthGateOpen] = useState<boolean>(false);
+  const [verificationBanner, setVerificationBanner] = useState<string | null>(null);
   
   // Context Persistence Policy (Firestore Cloud by default vs Local Transient)
   const [persistenceMode, setPersistenceMode] = useState<'firestore_cloud' | 'local_transient'>('firestore_cloud');
 
   // Context Ledger state (persisted in Firestore & populated via live dispatches)
   const [ledger, setLedger] = useState<ContextLedgerEntry[]>([]);
+
+  // Check URL query params for direct email verification link: ?verify_token=...&email=...
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const verifyToken = urlParams.get('verify_token');
+      const verifyEmail = urlParams.get('email');
+
+      if (verifyToken && verifyEmail) {
+        fetch('/api/auth/verify-email-trial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: verifyEmail,
+            token: verifyToken,
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.user) {
+              localStorage.setItem('whyor_trial_user', JSON.stringify(data.user));
+              setVerificationBanner(`🎉 Email verified successfully for ${verifyEmail}! Your 7-day free trial is now active.`);
+              // Clean URL parameters without reload
+              window.history.replaceState({}, document.title, window.location.pathname);
+              setTimeout(() => setVerificationBanner(null), 8000);
+            }
+          })
+          .catch((err) => console.warn('Direct link verification notice:', err));
+      }
+    } catch (e) {
+      console.warn('URL parse notice:', e);
+    }
+  }, []);
 
   // Hydrate ledger from Firestore if available
   useEffect(() => {
@@ -131,12 +167,31 @@ export default function App() {
           setActivePersona={setActivePersona}
           onOpenApiExplorer={() => setIsApiExplorerOpen(true)}
           onOpenQualityInspector={() => setIsQualityInspectorOpen(!isQualityInspectorOpen)}
+          onOpenAuthGate={() => setIsAuthGateOpen(true)}
         />
       </div>
 
       {/* Main Content Area */}
       <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
+        {/* Verification Success Toast Banner */}
+        {verificationBanner && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/90 to-teal-950/90 border border-emerald-500/60 shadow-xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3">
+            <div className="flex items-center gap-3">
+              <span className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+              </span>
+              <span className="text-sm font-semibold text-emerald-100">{verificationBanner}</span>
+            </div>
+            <button
+              onClick={() => setVerificationBanner(null)}
+              className="p-1.5 rounded-lg text-emerald-400 hover:text-emerald-200 hover:bg-emerald-900/50 cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* 7-Day Free Trial Visual Progress Bar & Pro Upgrade Bar */}
         <TrialProgressBarHeader 
           onNavigateTab={setCurrentTab}
@@ -266,6 +321,7 @@ export default function App() {
         {currentTab === 'pricing' && (
           <PricingPage
             onNavigateTab={setCurrentTab}
+            onOpenAuthGate={() => setIsAuthGateOpen(true)}
           />
         )}
 
@@ -423,6 +479,18 @@ export default function App() {
         isOpen={isApiExplorerOpen}
         onClose={() => setIsApiExplorerOpen(false)}
         activePersona={activePersona}
+      />
+
+      {/* 7-Day Free Trial Auth Gate Modal */}
+      <AuthGateModal
+        isOpen={isAuthGateOpen}
+        onClose={() => setIsAuthGateOpen(false)}
+        title="Activate Your 7-Day Free Trial"
+        reason="Sign up with Google to access our managed Claude 3.7 & Gemini 2.5 subscription pools. Zero credit card or payment friction required."
+        onSuccess={() => {
+          setIsAuthGateOpen(false);
+          setCurrentTab('dispatch');
+        }}
       />
     </div>
   );

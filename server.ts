@@ -396,59 +396,59 @@ let companyProfile = {
   lastUpdated: new Date().toISOString(),
 };
 
-// Initial company credentials vault with real environment-derived active keys
+// Initial company credentials vault (starts unconfigured until user saves BYOK keys or links subscriptions)
 let companyCredentialsVault: Record<string, ServerCompanyCredential> = {
   google: {
     provider: "google",
     providerDisplayName: "Google Gemini",
-    authMethod: "api_key",
-    apiKey: process.env.GEMINI_API_KEY || "",
-    maskedKey: process.env.GEMINI_API_KEY ? `${process.env.GEMINI_API_KEY.slice(0, 6)}...${process.env.GEMINI_API_KEY.slice(-4)}` : "",
-    status: process.env.GEMINI_API_KEY ? "connected" : "unconfigured",
-    lastVerifiedAt: process.env.GEMINI_API_KEY ? new Date().toISOString() : undefined,
+    authMethod: undefined,
+    apiKey: "",
+    maskedKey: "",
+    hasSubscription: false,
+    status: "unconfigured",
     latencyMs: 145,
-    detectedModels: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    detectedModels: ["gemini-3.7-flash", "gemini-3.6-flash"],
     monthlySpendLimitUsd: 5000,
     currentSpendUsd: 0,
-    notes: "Google Gemini direct API key active via server environment.",
+    notes: "Google Gemini direct API key or Google One AI Premium subscription.",
   },
   openai: {
     provider: "openai",
     providerDisplayName: "OpenAI",
-    authMethod: "api_key",
-    apiKey: process.env.OPENAI_API_KEY || "",
-    maskedKey: process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.slice(0, 6)}...${process.env.OPENAI_API_KEY.slice(-4)}` : "",
-    status: process.env.OPENAI_API_KEY ? "connected" : "unconfigured",
-    lastVerifiedAt: process.env.OPENAI_API_KEY ? new Date().toISOString() : undefined,
+    authMethod: undefined,
+    apiKey: "",
+    maskedKey: "",
+    hasSubscription: false,
+    status: "unconfigured",
     latencyMs: 195,
     detectedModels: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini", "gpt-4.5-preview"],
     monthlySpendLimitUsd: 10000,
     currentSpendUsd: 0,
-    notes: "Direct OpenAI API key connection.",
+    notes: "Direct OpenAI API key or ChatGPT Plus/Pro subscription connection.",
   },
   anthropic: {
     provider: "anthropic",
     providerDisplayName: "Anthropic Claude",
-    authMethod: "api_key",
-    apiKey: process.env.ANTHROPIC_API_KEY || "",
-    maskedKey: process.env.ANTHROPIC_API_KEY ? `${process.env.ANTHROPIC_API_KEY.slice(0, 8)}...${process.env.ANTHROPIC_API_KEY.slice(-4)}` : "",
-    status: process.env.ANTHROPIC_API_KEY ? "connected" : "unconfigured",
-    lastVerifiedAt: process.env.ANTHROPIC_API_KEY ? new Date().toISOString() : undefined,
+    authMethod: undefined,
+    apiKey: "",
+    maskedKey: "",
+    hasSubscription: false,
+    status: "unconfigured",
     latencyMs: 230,
     detectedModels: ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
     monthlySpendLimitUsd: 8000,
     currentSpendUsd: 0,
-    notes: "Direct Anthropic API key connection.",
+    notes: "Direct Anthropic API key or Claude Pro/Max subscription connection.",
   },
   deepseek: {
     provider: "deepseek",
     providerDisplayName: "DeepSeek",
-    authMethod: "api_key",
-    apiKey: process.env.DEEPSEEK_API_KEY || "",
-    maskedKey: process.env.DEEPSEEK_API_KEY ? `${process.env.DEEPSEEK_API_KEY.slice(0, 6)}...${process.env.DEEPSEEK_API_KEY.slice(-4)}` : "",
+    authMethod: undefined,
+    apiKey: "",
+    maskedKey: "",
+    hasSubscription: false,
     baseUrl: "https://api.deepseek.com",
-    status: process.env.DEEPSEEK_API_KEY ? "connected" : "unconfigured",
-    lastVerifiedAt: process.env.DEEPSEEK_API_KEY ? new Date().toISOString() : undefined,
+    status: "unconfigured",
     latencyMs: 260,
     detectedModels: ["deepseek-chat", "deepseek-reasoner"],
     monthlySpendLimitUsd: 3000,
@@ -458,12 +458,12 @@ let companyCredentialsVault: Record<string, ServerCompanyCredential> = {
   groq: {
     provider: "groq",
     providerDisplayName: "Groq LPU",
-    authMethod: "api_key",
-    apiKey: process.env.GROQ_API_KEY || "",
-    maskedKey: process.env.GROQ_API_KEY ? `${process.env.GROQ_API_KEY.slice(0, 6)}...${process.env.GROQ_API_KEY.slice(-4)}` : "",
+    authMethod: undefined,
+    apiKey: "",
+    maskedKey: "",
+    hasSubscription: false,
     baseUrl: "https://api.groq.com/openai/v1",
-    status: process.env.GROQ_API_KEY ? "connected" : "unconfigured",
-    lastVerifiedAt: process.env.GROQ_API_KEY ? new Date().toISOString() : undefined,
+    status: "unconfigured",
     latencyMs: 95,
     detectedModels: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
     monthlySpendLimitUsd: 2500,
@@ -473,11 +473,11 @@ let companyCredentialsVault: Record<string, ServerCompanyCredential> = {
   mistral: {
     provider: "mistral",
     providerDisplayName: "Mistral AI",
-    authMethod: "api_key",
-    apiKey: process.env.MISTRAL_API_KEY || "",
-    maskedKey: process.env.MISTRAL_API_KEY ? `${process.env.MISTRAL_API_KEY.slice(0, 6)}...${process.env.MISTRAL_API_KEY.slice(-4)}` : "",
-    status: process.env.MISTRAL_API_KEY ? "connected" : "unconfigured",
-    lastVerifiedAt: process.env.MISTRAL_API_KEY ? new Date().toISOString() : undefined,
+    authMethod: undefined,
+    apiKey: "",
+    maskedKey: "",
+    hasSubscription: false,
+    status: "unconfigured",
     latencyMs: 215,
     detectedModels: ["mistral-large-latest", "codestral-latest", "pixtral-12b-2409"],
     monthlySpendLimitUsd: 2000,
@@ -501,7 +501,113 @@ function getGemini(customKey?: string): GoogleGenAI | null {
   });
 }
 
-// Multi-Provider Direct Model Invoker (No Dummy Data - Direct HTTPS calls)
+function formatCleanErrorMessage(err: any): string {
+  if (!err) return "Inference request could not be completed. Please try again.";
+  let raw = typeof err === "string" ? err : err.message || String(err);
+
+  // Parse JSON payloads if embedded
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.error?.message) {
+      raw = parsed.error.message;
+    }
+  } catch {}
+
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("high demand") || lower.includes("spikes in demand")) {
+    return "This model is currently experiencing temporary high demand on the provider platform. Please retry in a few seconds or choose Gemini 3.7 Flash for instant zero-configuration corroboration.";
+  }
+
+  if (lower.includes("quota") || lower.includes("rate_limit") || lower.includes("resource_exhausted") || lower.includes("429")) {
+    return "Rate limit or quota threshold reached for this provider. Please wait a moment and retry, or configure your BYOK API key in Company Settings.";
+  }
+
+  if (lower.includes("doctype html") || lower.includes("<html") || lower.includes("non-json")) {
+    return "The server was briefly reconnecting or initializing. Please retry your request.";
+  }
+
+  if (lower.includes("is not configured") || lower.includes("unconfigured")) {
+    return raw;
+  }
+
+  if (lower.includes("api key") && lower.includes("missing")) {
+    return "Provider API key is unconfigured. Please link your subscription or add your API key in Company Settings.";
+  }
+
+  return raw;
+}
+
+// Resilient Gemini Invoker with adaptive candidate fallback and backoff
+async function callGeminiResiliently(
+  ai: GoogleGenAI,
+  prompt: string,
+  preferredModel: string = "gemini-3.1-flash-lite",
+  systemInstruction?: string,
+  temperature?: number
+): Promise<{ text: string; modelUsed: string }> {
+  // Determine normalized target
+  let target = preferredModel;
+  if (target.includes("3.1-flash-lite") || target.includes("lite")) {
+    target = "gemini-3.1-flash-lite";
+  } else if (target.includes("3.7")) {
+    target = "gemini-3.7-flash";
+  } else if (target.includes("pro")) {
+    target = "gemini-3.1-pro-preview";
+  } else if (target.includes("flash-latest")) {
+    target = "gemini-flash-latest";
+  } else {
+    target = "gemini-3.1-flash-lite";
+  }
+
+  // Safe fallback cascade: target -> gemini-3.1-flash-lite -> gemini-3.7-flash -> gemini-flash-latest -> gemini-3.1-pro-preview
+  const basePool = ["gemini-3.1-flash-lite", "gemini-3.7-flash", "gemini-flash-latest", "gemini-3.1-pro-preview"];
+  const candidates = [target, ...basePool.filter(m => m !== target)];
+  const tried = new Set<string>();
+
+  let text = "";
+  let modelUsed = target;
+  let lastError: any = null;
+
+  for (const candidate of candidates) {
+    if (tried.has(candidate)) continue;
+    tried.add(candidate);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await ai.models.generateContent({
+          model: candidate,
+          contents: prompt,
+          config: {
+            systemInstruction: systemInstruction || "You are an enterprise AI engine executing comparative corroboration via WhyOr Dispatch. Provide accurate, clear, and factual analysis.",
+            temperature: temperature ?? 0.7,
+          },
+        });
+        text = response.text || "";
+        if (text) {
+          modelUsed = candidate;
+          lastError = null;
+          return { text, modelUsed };
+        }
+      } catch (gErr: any) {
+        lastError = gErr;
+        const msg = String(gErr?.message || gErr);
+        const isTransient = msg.includes("503") || msg.includes("high demand") || msg.includes("UNAVAILABLE") || msg.includes("429") || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED");
+        if (isTransient && attempt === 0) {
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+    }
+  }
+
+  if (!text && lastError) {
+    throw lastError;
+  }
+
+  return { text: text || "Execution completed.", modelUsed };
+}
+
+// Multi-Provider Direct Model Invoker (Direct HTTPS calls & Subscription Proxies)
 async function callDirectProviderAPI(
   provider: string,
   modelId: string,
@@ -509,10 +615,43 @@ async function callDirectProviderAPI(
   cred?: ServerCompanyCredential
 ): Promise<{ text: string; inputTokens: number; outputTokens: number; latencyMs: number; provider: string; model: string; directBilled: boolean; rawStatus: string }> {
   const start = Date.now();
-  const apiKey = cred?.apiKey || companyCredentialsVault[provider]?.apiKey || (provider === "google" ? process.env.GEMINI_API_KEY : undefined);
+  const targetCred = cred || companyCredentialsVault[provider];
+  const hasSub = Boolean(targetCred?.hasSubscription);
+  const apiKey = targetCred?.apiKey || (provider === "google" ? process.env.GEMINI_API_KEY : undefined);
 
-  if (!apiKey && provider !== "google") {
-    throw new Error(`Direct API Key for provider '${provider}' is not configured in the Company Credentials tab. Please configure your key.`);
+  if (!apiKey && !hasSub && provider !== "google") {
+    throw new Error(`Provider '${provider.toUpperCase()}' is unconfigured. Please connect your flat-rate subscription (e.g. ChatGPT Plus/Pro, Claude Pro) or configure your BYOK API Key in Company Settings, or select Gemini 3.7 Flash / Flash Lite for instant zero-configuration verification.`);
+  }
+
+  // Handle local proxy bridge if active for subscription
+  if (hasSub && targetCred?.localProxyUrl && targetCred?.proxyStatus === "running") {
+    try {
+      const res = await fetch(`${targetCred.localProxyUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      if (res.ok) {
+        const data: any = await res.json();
+        const text = data.choices?.[0]?.message?.content || "";
+        const latencyMs = Date.now() - start;
+        return {
+          text,
+          inputTokens: Math.ceil(prompt.split(/\s+/).length * 1.35),
+          outputTokens: Math.ceil(text.split(/\s+/).length * 1.35),
+          latencyMs,
+          provider,
+          model: modelId,
+          directBilled: false,
+          rawStatus: `200 OK (${provider.toUpperCase()} Subscription Flat $0.00/token)`,
+        };
+      }
+    } catch (proxyErr) {
+      console.warn(`Local proxy bridge notice for ${provider}:`, proxyErr);
+    }
   }
 
   // 1. Google Gemini
@@ -527,25 +666,18 @@ async function callDirectProviderAPI(
         },
       },
     });
-    let realModel = "gemini-3.7-flash";
-    if (modelId.includes("pro")) realModel = "gemini-3.1-pro-preview";
-    else if (modelId.includes("flash-lite") || modelId.includes("8b")) realModel = "gemini-3.1-flash-lite";
-    else if (modelId.includes("flash")) realModel = "gemini-3.7-flash";
-    else realModel = "gemini-3.7-flash";
 
-    const response = await customAi.models.generateContent({
-      model: realModel,
-      contents: prompt,
-      config: {
-        systemInstruction: "You are an enterprise AI engine executing direct company-billed inference via WhyOr Dispatch.",
-      }
-    });
+    const { text, modelUsed } = await callGeminiResiliently(
+      customAi,
+      prompt,
+      modelId,
+      "You are an enterprise AI engine executing comparative corroboration via WhyOr Dispatch. Provide accurate, clear, and factual analysis."
+    );
 
     const latencyMs = Date.now() - start;
-    const text = response.text || "";
     const inTok = Math.ceil(prompt.split(/\s+/).length * 1.35);
     const outTok = Math.ceil(text.split(/\s+/).length * 1.35);
-    return { text, inputTokens: inTok, outputTokens: outTok, latencyMs, provider: "google", model: realModel, directBilled: true, rawStatus: "200 OK (Direct Google Gemini)" };
+    return { text, inputTokens: inTok, outputTokens: outTok, latencyMs, provider: "google", model: modelUsed, directBilled: true, rawStatus: "200 OK (Direct Google Gemini)" };
   }
 
   // 2. OpenAI
@@ -1328,6 +1460,261 @@ app.post("/api/credentials/subscription/disconnect", (req, res) => {
       ...companyCredentialsVault[provider],
       apiKey: undefined,
     }
+  });
+});
+
+// Trial Email Verification System (Pending Queue & Sender)
+interface PendingTrialVerification {
+  email: string;
+  displayName: string;
+  code: string;
+  token: string;
+  createdAt: number;
+  expiresAt: number;
+}
+const pendingTrialVerifications = new Map<string, PendingTrialVerification>();
+
+async function sendTrialVerificationEmail(email: string, displayName: string, code: string, token: string, baseUrl: string) {
+  const verifyLink = `${baseUrl.replace(/\/$/, '')}/?verify_token=${token}&email=${encodeURIComponent(email)}`;
+  const subject = `[WhyOr Dispatch AI] Verify your email to activate 7-Day Free Trial`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"/></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #020617; color: #f8fafc; margin: 0; padding: 24px;">
+      <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; background-color: #0f172a; border-radius: 16px; border: 1px solid #1e293b; overflow: hidden;">
+        <tr>
+          <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); border-bottom: 1px solid #1e293b;">
+            <div style="display: inline-block; padding: 6px 12px; border-radius: 9999px; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); color: #a5b4fc; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">
+              ⚡ WhyOr AI Dispatch Engine
+            </div>
+            <h1 style="color: #ffffff; font-size: 22px; font-weight: 800; margin: 0 0 6px 0;">Verify Your Email Address</h1>
+            <p style="color: #94a3b8; font-size: 14px; margin: 0;">Activate your 7-Day complimentary free trial with 100,000 daily tokens</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 32px;">
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6; margin-top: 0;">
+              Hello <strong>${displayName || 'there'}</strong>,
+            </p>
+            <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">
+              Thank you for registering for the WhyOr Dispatch AI platform trial. To ensure secure access and activate your free multi-model routing allocation, please verify your email using either the 6-digit code or the direct activation link below:
+            </p>
+
+            <!-- 6 Digit Code Box -->
+            <div style="margin: 24px 0; background: #020617; border: 1px solid #334155; border-radius: 12px; padding: 20px; text-align: center;">
+              <div style="color: #64748b; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">Your 6-Digit Verification Code</div>
+              <div style="font-family: 'Courier New', Courier, monospace; font-size: 32px; font-weight: 800; letter-spacing: 0.3em; color: #38bdf8;">
+                ${code}
+              </div>
+              <div style="color: #64748b; font-size: 11px; margin-top: 6px;">Valid for 24 hours</div>
+            </div>
+
+            <!-- Direct Verification Button -->
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${verifyLink}" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 14px 28px; border-radius: 10px; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);">
+                Verify Email & Activate Free Trial →
+              </a>
+            </div>
+
+            <p style="color: #64748b; font-size: 12px; line-height: 1.5; margin-top: 24px; border-top: 1px solid #1e293b; padding-top: 16px;">
+              Or copy and paste this activation link directly into your browser:<br/>
+              <a href="${verifyLink}" style="color: #38bdf8; word-break: break-all;">${verifyLink}</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  if (smtpSettings.user && smtpSettings.pass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpSettings.host,
+        port: smtpSettings.port,
+        secure: smtpSettings.secure || smtpSettings.port === 465,
+        auth: {
+          user: smtpSettings.user,
+          pass: smtpSettings.pass,
+        },
+      });
+      await transporter.sendMail({
+        from: `"${smtpSettings.fromName || 'WhyOr Dispatch AI'}" <${smtpSettings.fromEmail || smtpSettings.user}>`,
+        to: email,
+        subject,
+        html,
+        text: `Verify your email for WhyOr Free Trial. Code: ${code}. Link: ${verifyLink}`,
+      });
+    } catch (e: any) {
+      console.warn("SMTP send notice:", e.message);
+    }
+  }
+
+  emailLogs.unshift({
+    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    to: email,
+    from: "WhyOr Verification <verify@whyor.ai>",
+    subject,
+    emailType: "free_trial_email_verification",
+    status: "sent" as const,
+    sentAt: new Date().toISOString(),
+    sentBy: "system_auth",
+  });
+  if (emailLogs.length > 50) emailLogs.pop();
+}
+
+// 1. Email Trial Registration (generates code + token + dispatches email)
+app.post("/api/auth/register-email-trial", async (req, res) => {
+  const { email, displayName } = req.body;
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return res.status(400).json({ error: "A valid email address is required to register." });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const name = displayName?.trim() || cleanEmail.split("@")[0];
+
+  // Generate 6-digit code and secure random token
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const token = `vtok_${Date.now()}_${crypto.randomBytes(8).toString("hex")}`;
+  const now = Date.now();
+  const expiresAt = now + 24 * 60 * 60 * 1000; // 24 hours
+
+  pendingTrialVerifications.set(cleanEmail, {
+    email: cleanEmail,
+    displayName: name,
+    code,
+    token,
+    createdAt: now,
+    expiresAt,
+  });
+
+  const baseUrl = `${req.protocol}://${req.get("host") || "localhost:3000"}`;
+  await sendTrialVerificationEmail(cleanEmail, name, code, token, baseUrl);
+
+  res.json({
+    success: true,
+    message: `Verification link and 6-digit code have been dispatched to ${cleanEmail}. Please check your inbox and click the link or enter the code to activate your 7-day free trial.`,
+    email: cleanEmail,
+    pendingVerification: true,
+    verificationCodeDev: code, // handy in dev/sandbox if no live SMTP is set
+    token,
+  });
+});
+
+// 2. Verify Email Trial (validates code OR token)
+app.post("/api/auth/verify-email-trial", (req, res) => {
+  const { email, code, token } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email address is required for verification." });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const pending = pendingTrialVerifications.get(cleanEmail);
+
+  if (!pending) {
+    // If user already registered or direct verification token provided
+    let user = getUserByEmail(cleanEmail);
+    if (user) {
+      return res.json({
+        success: true,
+        message: "Email already verified and trial is active.",
+        user: {
+          uid: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          emailVerified: true,
+          plan: "free_trial",
+          isTrialActive: true,
+          daysRemaining: 7,
+          trialStartDate: new Date().toISOString(),
+        },
+      });
+    }
+    return res.status(400).json({
+      error: "No pending verification found for this email. Please request a new verification code.",
+    });
+  }
+
+  if (Date.now() > pending.expiresAt) {
+    pendingTrialVerifications.delete(cleanEmail);
+    return res.status(400).json({
+      error: "Verification code has expired. Please request a new code.",
+    });
+  }
+
+  const codeMatch = code && pending.code === code.trim();
+  const tokenMatch = token && pending.token === token.trim();
+
+  if (!codeMatch && !tokenMatch) {
+    return res.status(400).json({
+      error: "Invalid 6-digit verification code or token. Please check the email sent to you.",
+    });
+  }
+
+  // Verification passed! Upsert user record
+  pendingTrialVerifications.delete(cleanEmail);
+
+  let user = getUserByEmail(cleanEmail);
+  if (!user) {
+    user = createUser({
+      email: cleanEmail,
+      displayName: pending.displayName || cleanEmail.split("@")[0],
+      role: "team_member",
+      companyId: null,
+      teamId: null,
+      privileges: { canSelectModel: true },
+      createdByUserId: null,
+    });
+  }
+
+  res.json({
+    success: true,
+    message: "Email successfully verified! Your 7-Day Free Trial is now active with 100,000 daily tokens.",
+    user: {
+      uid: user.id,
+      email: user.email,
+      displayName: user.displayName || pending.displayName,
+      emailVerified: true,
+      plan: "free_trial",
+      isTrialActive: true,
+      daysRemaining: 7,
+      trialStartDate: new Date().toISOString(),
+    },
+  });
+});
+
+// 3. Resend Verification Code & Link
+app.post("/api/auth/resend-verification", async (req, res) => {
+  const { email, displayName } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required to resend verification." });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const name = displayName?.trim() || cleanEmail.split("@")[0];
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const token = `vtok_${Date.now()}_${crypto.randomBytes(8).toString("hex")}`;
+  const now = Date.now();
+  const expiresAt = now + 24 * 60 * 60 * 1000;
+
+  pendingTrialVerifications.set(cleanEmail, {
+    email: cleanEmail,
+    displayName: name,
+    code,
+    token,
+    createdAt: now,
+    expiresAt,
+  });
+
+  const baseUrl = `${req.protocol}://${req.get("host") || "localhost:3000"}`;
+  await sendTrialVerificationEmail(cleanEmail, name, code, token, baseUrl);
+
+  res.json({
+    success: true,
+    message: `Fresh verification code and direct activation link sent to ${cleanEmail}.`,
+    verificationCodeDev: code,
   });
 });
 
@@ -2416,13 +2803,10 @@ app.post("/api/dispatch", async (req, res) => {
       const ai = getGemini();
       if (ai) {
         const subPrompt = `[Execution Context: ${vaultCred.providerDisplayName} ${vaultCred.subscriptionTier || 'Subscription'} Session (solarastra.in@gmail.com)]\n${promptText}`;
-        const modelToUse = (modelToTry.tier === "frontier" || modelToTry.tier === "deep_reasoning") ? "gemini-3.1-pro-preview" : "gemini-3.7-flash";
-        const response = await ai.models.generateContent({
-          model: modelToUse,
-          contents: subPrompt,
-        });
+        const modelToUse = (modelToTry.tier === "frontier" || modelToTry.tier === "deep_reasoning") ? "gemini-3.1-pro-preview" : "gemini-3.1-flash-lite";
+        const { text: subText } = await callGeminiResiliently(ai, subPrompt, modelToUse);
         return {
-          text: response.text || "Execution finished via subscription session proxy.",
+          text: subText || "Execution finished via subscription session proxy.",
           dispatchedVia: "company_subscription_gateway",
           directBilled: true,
           rawStatus: `200 OK via Local Subscription Gateway (${vaultCred.subscriptionTier || 'Flat-Rate Subscription'} - $0.00/token)`,
@@ -2459,23 +2843,22 @@ app.post("/api/dispatch", async (req, res) => {
       if (ai) {
         const modelToUse = (modelToTry.tier === "frontier" || modelToTry.tier === "deep_reasoning")
           ? "gemini-3.1-pro-preview"
-          : "gemini-3.7-flash";
+          : "gemini-3.1-flash-lite";
 
         const systemPrompt = `You are an ultra-precise, token-optimized AI engine operating under WhyOr Dispatch (${modelToTry.name} / ${modelToTry.tierLabel}).
 Provide a direct, high-value, crisp response to the user's prompt without unnecessary conversational filler or preamble.
 Context decisions and extracted entities will be written to the WhyOr cryptographic context ledger.`;
 
-        const response = await ai.models.generateContent({
-          model: modelToUse,
-          contents: promptText,
-          config: {
-            systemInstruction: systemPrompt,
-            temperature: modelToTry.tier === "deep_reasoning" ? 0.2 : 0.7,
-          },
-        });
+        const { text: genText } = await callGeminiResiliently(
+          ai,
+          promptText,
+          modelToUse,
+          systemPrompt,
+          modelToTry.tier === "deep_reasoning" ? 0.2 : 0.7
+        );
 
         return {
-          text: response.text || "Execution completed with structured response.",
+          text: genText || "Execution completed with structured response.",
           dispatchedVia: "platform_managed_key",
           directBilled: false,
           rawStatus: "200 OK (Platform Gemini Pool)",
@@ -2564,11 +2947,8 @@ Context decisions and extracted entities will be written to the WhyOr cryptograp
           try {
             const fallbackAi = getGemini();
             if (fallbackAi) {
-              const fbRes = await fallbackAi.models.generateContent({
-                model: "gemini-3.7-flash",
-                contents: prompt,
-              });
-              generatedOutput = fbRes.text || generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+              const { text: fbText } = await callGeminiResiliently(fallbackAi, prompt, "gemini-3.1-flash-lite");
+              generatedOutput = fbText || generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
               executionStatus = "success";
               dispatchedVia = "platform_hybrid_fallback";
               rawExecutionNote = `Hybrid Fallback: ${errReason}`;
@@ -2587,11 +2967,8 @@ Context decisions and extracted entities will be written to the WhyOr cryptograp
         try {
           const fallbackAi = getGemini();
           if (fallbackAi) {
-            const fbRes = await fallbackAi.models.generateContent({
-              model: "gemini-3.7-flash",
-              contents: prompt,
-            });
-            generatedOutput = fbRes.text || generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
+            const { text: fbText } = await callGeminiResiliently(fallbackAi, prompt, "gemini-3.1-flash-lite");
+            generatedOutput = fbText || generateSimulatedResponse(prompt, taskCategory, currentCandidate.name);
             executionStatus = "success";
             dispatchedVia = "platform_hybrid_fallback";
             rawExecutionNote = `Hybrid Fallback: ${errReason}`;
@@ -3053,7 +3430,7 @@ app.post("/api/dispatch/output", async (req, res) => {
 
   // Resolve target model and provider based on targetModelIds
   let provider = requestedProvider || "google";
-  let modelId = requestedModelId || "gemini-2.5-flash";
+  let modelId = requestedModelId || "gemini-3.1-flash-lite";
   let optimizationScope = "full_catalog";
 
   if (Array.isArray(targetModelIds) && targetModelIds.length > 0) {
@@ -3127,11 +3504,19 @@ app.post("/api/dispatch/output", async (req, res) => {
       const parts = buildMultimodalContent(provider, effectivePrompt, files);
       const gemini = getGemini();
       if (gemini && provider === "google") {
-        const genRes = await gemini.models.generateContent({
-          model: modelId.includes("gemini") ? modelId : "gemini-2.5-flash",
-          contents: parts as any,
-        });
-        completionText = genRes.text || "";
+        try {
+          const genRes = await gemini.models.generateContent({
+            model: modelId.includes("gemini") ? modelId : "gemini-3.1-flash-lite",
+            contents: parts as any,
+          });
+          completionText = genRes.text || "";
+        } catch {
+          const fallbackRes = await gemini.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: parts as any,
+          });
+          completionText = fallbackRes.text || "";
+        }
       } else {
         completionText = `Analysis of attached file (${files.length} file(s)):\n\n${generateSimulatedResponse(effectivePrompt, "deep_synthesis", modelId)}`;
       }
@@ -3252,7 +3637,7 @@ app.post("/api/corroborate", async (req, res) => {
     const result = await runCorroboration({ prompt, modelA, modelB }, caller);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Corroboration failed" });
+    res.status(500).json({ error: formatCleanErrorMessage(err) || "Corroboration failed" });
   }
 });
 
@@ -3290,7 +3675,7 @@ app.post("/api/dispatch/corroborate", async (req, res) => {
 
     res.json(result);
   } catch (err: any) {
-    res.status(502).json({ error: err.message || "Corroboration dispatch failed" });
+    res.status(502).json({ error: formatCleanErrorMessage(err) || "Corroboration dispatch failed" });
   }
 });
 
@@ -3364,7 +3749,7 @@ app.post("/api/dispatch/relay", async (req, res) => {
 
     res.json(result);
   } catch (err: any) {
-    res.status(502).json({ error: err.message || "Relay dispatch failed" });
+    res.status(502).json({ error: formatCleanErrorMessage(err) || "Relay dispatch failed" });
   }
 });
 

@@ -86,7 +86,7 @@ export default function PromptComposer({
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder="Type your prompt…"
+        placeholder="Enter your prompt, complex question, or analysis task here..."
         rows={4}
         className="w-full bg-transparent text-sm resize-none focus:outline-none"
       />

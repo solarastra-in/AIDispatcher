@@ -26,18 +26,20 @@ interface RelayResult {
 }
 
 const AVAILABLE_MODELS: RelayModelStep[] = [
-  { provider: "google", modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-  { provider: "anthropic", modelId: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-  { provider: "openai", modelId: "gpt-4o", label: "GPT-4o" },
-  { provider: "deepseek", modelId: "deepseek-chat", label: "DeepSeek V3" },
-  { provider: "mistral", modelId: "mistral-large-latest", label: "Mistral Large" },
+  { provider: "google", modelId: "gemini-3.7-flash", label: "Gemini 3.7 Flash (Ready)" },
+  { provider: "google", modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite (Ready)" },
+  { provider: "google", modelId: "gemini-flash-latest", label: "Gemini Flash Latest (Ready)" },
+  { provider: "openai", modelId: "openai-subscription-gpt4o", label: "ChatGPT Pro (Subscription $0/tok)" },
+  { provider: "anthropic", modelId: "claude-subscription-sonnet", label: "Claude Pro (Subscription $0/tok)" },
+  { provider: "openai", modelId: "gpt-4o", label: "GPT-4o (BYOK Key)" },
+  { provider: "anthropic", modelId: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (BYOK Key)" },
+  { provider: "deepseek", modelId: "deepseek-chat", label: "DeepSeek V3 (BYOK Key)" },
+  { provider: "mistral", modelId: "mistral-large-latest", label: "Mistral Large (BYOK Key)" },
 ];
 
 export default function RelayPanel() {
-  const [data, setData] = useState(
-    "Contract Amendment Clause 14.2: In the event of unforeseen logistics disruption, Supplier shall notify Buyer within 48 hours and provide alternate route verification at Supplier's sole expense. Liquidated damages shall be capped at 5% of monthly billing."
-  );
-  const [instruction, setInstruction] = useState("Critique ambiguities, tighten legal clauses, and draft an executive bullet summary");
+  const [data, setData] = useState("");
+  const [instruction, setInstruction] = useState("");
   const [chain, setChain] = useState<RelayModelStep[]>([AVAILABLE_MODELS[0], AVAILABLE_MODELS[1]]);
   const [result, setResult] = useState<RelayResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,8 +68,15 @@ export default function RelayPanel() {
           modelChain: chain.map(({ provider, modelId }) => ({ provider, modelId })),
         }),
       });
-      const json = await res.json();
-      if (!res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      let json: any;
+      if (contentType.includes("application/json")) {
+        json = await res.json();
+      } else {
+        const rawText = await res.text();
+        throw new Error(`Server returned status ${res.status}: ${rawText.slice(0, 160)}`);
+      }
+      if (!res.ok || json.error) {
         setError(json.error || "Relay pipeline execution failed. Please verify provider connectivity.");
       } else {
         setResult(json);
@@ -114,26 +123,40 @@ export default function RelayPanel() {
       {/* Input Data & Instruction */}
       <div className="space-y-4">
         <div>
-          <label className="block text-xs font-mono text-slate-400 mb-1.5">
-            Initial Source Text or Prompt Draft:
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-mono text-slate-300 font-semibold">
+              Initial Source Text or Prompt Draft:
+            </label>
+            <span className="text-[11px] font-mono text-slate-500">{data.length} chars</span>
+          </div>
+
+          <div className="mb-2 p-2.5 rounded-xl bg-slate-950/60 border border-white/[0.06] text-[11px] text-slate-300 leading-relaxed">
+            <span className="font-semibold text-orange-300 font-mono">What goes in this box:</span> Enter or paste the raw source text, contract clause, draft memo, technical code snippet, or dataset to be iteratively processed through each model stage in your configured chain.
+          </div>
+
           <textarea
             value={data}
             onChange={(e) => setData(e.target.value)}
-            placeholder="Paste your source text, contract clause, draft, or data to refine..."
+            placeholder="Paste your source text, contract clause, draft, or data to refine... (e.g. Contract Amendment Clause 14.2: In the event of logistics disruption...)"
             rows={3}
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-600 resize-none focus:outline-none focus:border-orange-500/50 leading-relaxed"
+            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-600 resize-none focus:outline-none focus:border-orange-500/50 leading-relaxed font-mono"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-mono text-slate-400 mb-1.5">
-            Refinement Directive (Applied at each stage):
+          <label className="block text-xs font-mono text-slate-300 font-semibold mb-1.5">
+            Refinement Directive (Applied at each sequential stage):
           </label>
+
+          <div className="mb-2 p-2.5 rounded-xl bg-slate-950/60 border border-white/[0.06] text-[11px] text-slate-300 leading-relaxed">
+            <span className="font-semibold text-cyan-300 font-mono">What goes in this box:</span> Specify what transformation or critique each model in the pipeline should perform (e.g., 'Step 1: Critique ambiguities, Step 2: Tighten clauses, Step 3: Draft an executive bullet summary').
+          </div>
+
           <input
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-orange-500/50"
+            placeholder="e.g. Critique ambiguities, tighten legal clauses, and draft an executive bullet summary"
+            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-orange-500/50 font-mono"
           />
         </div>
       </div>

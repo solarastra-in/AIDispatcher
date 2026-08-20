@@ -490,6 +490,7 @@ export interface UserTrialInfo {
   daysRemaining: number;
   isTrialActive: boolean;
   isExpired: boolean;
+  emailVerified?: boolean;
   hasConfiguredByok: boolean;
   isByokConfigured?: boolean;
   dailyTokensUsed: number;

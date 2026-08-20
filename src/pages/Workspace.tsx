@@ -99,7 +99,7 @@ export default function Workspace({
             {
               role: "assistant",
               content: "Welcome to WhyOr Dispatch Workspace! Enter any prompt below to auto-dispatch across frontier & open models with adaptive context compression, or switch to Corroborate / Relay modes above.",
-              modelUsed: "gemini-2.5-flash",
+              modelUsed: "gemini-3.1-flash-lite",
               providerUsed: "google",
               timestamp: new Date().toISOString(),
             },
@@ -296,8 +296,8 @@ export default function Workspace({
           {mode === "corroborate" ? (
             <CorroboratePanel
               prompt={messages[messages.length - 1]?.content || ""}
-              modelA={{ provider: "google", modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash" }}
-              modelB={{ provider: "anthropic", modelId: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" }}
+              modelA={{ provider: "google", modelId: "gemini-3.7-flash", label: "Gemini 3.7 Flash" }}
+              modelB={{ provider: "google", modelId: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite" }}
             />
           ) : mode === "relay" ? (
             <RelayPanel />

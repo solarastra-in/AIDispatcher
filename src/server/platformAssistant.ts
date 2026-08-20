@@ -9,7 +9,7 @@ export interface PlatformAssistantConfig {
 
 let portalDefaultConfig: PlatformAssistantConfig = {
   provider: "google",
-  modelId: "gemini-2.5-flash",
+  modelId: "gemini-3.1-flash-lite",
   useLocalProxyIfAvailable: false,
   maxUtilityTokens: 400,
   updatedByAdminId: "system_default",

@@ -38,8 +38,9 @@ import {
 import { User } from 'firebase/auth';
 
 const AVAILABLE_MODELS = [
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Frontier Reasoning & Coding)', tier: 'Frontier Tier 3', provider: 'Google', defaultChecked: true },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Sub-Second Multimodal)', tier: 'Fast Tier 1', provider: 'Google', defaultChecked: true },
+  { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash (Hybrid Speed & Reasoning)', tier: 'Fast Tier 1', provider: 'Google', defaultChecked: true },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Ultra-Low Latency)', tier: 'Fast Tier 1', provider: 'Google', defaultChecked: true },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview (Frontier Coding & Math)', tier: 'Frontier Tier 3', provider: 'Google', defaultChecked: true },
   { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet (Hybrid Reasoning)', tier: 'Frontier Tier 3', provider: 'Anthropic', defaultChecked: true },
   { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (High-Speed Code/Chat)', tier: 'Fast Tier 1', provider: 'Anthropic', defaultChecked: true },
   { id: 'gpt-4o', name: 'GPT-4o (Omni Production Model)', tier: 'General Tier 2', provider: 'OpenAI', defaultChecked: true },
@@ -62,7 +63,7 @@ const DEFAULT_COMPANIES: CompanyFirestore[] = [
     monthlyTokenQuota: 100_000_000,
     monthlyTokensUsed: 14_280_000,
     monthlyBudgetUsd: 5000,
-    allowedModels: ['gemini-2.5-pro', 'gemini-2.5-flash', 'claude-3-7-sonnet-20250219', 'deepseek-reasoner', 'gpt-4.5-preview'],
+    allowedModels: ['gemini-3.7-flash', 'gemini-3.1-flash-lite', 'claude-3-7-sonnet-20250219', 'deepseek-reasoner', 'gpt-4.5-preview'],
     routingPriority: 'subscription_first',
     smtpAlertsEnabled: true,
     superAdminEmail: 'solarastra.in@gmail.com',
@@ -80,7 +81,7 @@ const DEFAULT_COMPANIES: CompanyFirestore[] = [
     monthlyTokenQuota: 50_000_000,
     monthlyTokensUsed: 8_940_000,
     monthlyBudgetUsd: 2500,
-    allowedModels: ['gemini-2.5-pro', 'claude-3-7-sonnet-20250219', 'gpt-4o', 'mistral-large-latest'],
+    allowedModels: ['gemini-3.7-flash', 'claude-3-7-sonnet-20250219', 'gpt-4o', 'mistral-large-latest'],
     routingPriority: 'subscription_first',
     smtpAlertsEnabled: true,
     superAdminEmail: 'solarastra.in@gmail.com',
@@ -98,7 +99,7 @@ const DEFAULT_COMPANIES: CompanyFirestore[] = [
     monthlyTokenQuota: 200_000_000,
     monthlyTokensUsed: 42_190_000,
     monthlyBudgetUsd: 10000,
-    allowedModels: ['gemini-2.5-pro', 'claude-3-7-sonnet-20250219', 'gpt-4.5-preview', 'o3-mini', 'deepseek-reasoner'],
+    allowedModels: ['gemini-3.1-pro-preview', 'claude-3-7-sonnet-20250219', 'gpt-4.5-preview', 'o3-mini', 'deepseek-reasoner'],
     routingPriority: 'balanced',
     smtpAlertsEnabled: true,
     superAdminEmail: 'solarastra.in@gmail.com',
@@ -119,7 +120,7 @@ const DEFAULT_TEAMS: TeamFirestore[] = [
     monthlyTokenQuota: 50_000_000,
     monthlyTokensUsed: 8_200_000,
     monthlyBudgetUsd: 2500,
-    allowedModels: ['gemini-2.5-pro', 'claude-3-7-sonnet-20250219', 'deepseek-reasoner'],
+    allowedModels: ['gemini-3.7-flash', 'claude-3-7-sonnet-20250219', 'deepseek-reasoner'],
     members: [
       {
         id: 'mem_1',
@@ -246,8 +247,8 @@ export const CompanyTeamOnboarding: React.FC<CompanyTeamOnboardingProps> = ({
   const [newCompanyBudget, setNewCompanyBudget] = useState<number>(3000);
   const [newCompanyRouting, setNewCompanyRouting] = useState<'subscription_first' | 'byok_first' | 'balanced'>('subscription_first');
   const [newCompanyModels, setNewCompanyModels] = useState<string[]>([
-    'gemini-2.5-pro', 
-    'gemini-2.5-flash', 
+    'gemini-3.7-flash', 
+    'gemini-3.1-flash-lite', 
     'claude-3-7-sonnet-20250219', 
     'gpt-4o', 
     'deepseek-reasoner'
@@ -261,7 +262,8 @@ export const CompanyTeamOnboarding: React.FC<CompanyTeamOnboardingProps> = ({
   const [newTeamQuota, setNewTeamQuota] = useState<number>(20_000_000);
   const [newTeamBudget, setNewTeamBudget] = useState<number>(1000);
   const [newTeamModels, setNewTeamModels] = useState<string[]>([
-    'gemini-2.5-pro',
+    'gemini-3.7-flash',
+    'gemini-3.1-flash-lite',
     'claude-3-7-sonnet-20250219',
     'gpt-4o'
   ]);

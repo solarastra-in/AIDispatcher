@@ -14,6 +14,8 @@ import { TASK_ARCHETYPES, TaskArchetypeId } from '../core/taskTaxonomy';
 import { apiService } from '../core/apiSurface';
 import { FEEDBACK_SIGNALS, FeedbackSignalType } from '../core/feedbackEngine';
 import { AutoRoutingExplainabilityPanel } from './AutoRoutingExplainabilityPanel';
+import { QuotaExhaustionModal, QuotaExhaustionData } from './QuotaExhaustionModal';
+import { AuthGateModal } from './AuthGateModal';
 import Workspace from '../pages/Workspace';
 import CorroboratePanel from './CorroboratePanel';
 import RelayPanel from './RelayPanel';
@@ -80,7 +82,7 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
   onClearPrefill,
 }) => {
   const [consoleMode, setConsoleMode] = useState<'chat' | 'single_shot' | 'corroborate' | 'relay'>('chat');
-  const [prompt, setPrompt] = useState<string>(PRESET_SAMPLE_PROMPTS[0].prompt);
+  const [prompt, setPrompt] = useState<string>(prefilledPrompt || '');
   const [routingMode, setRoutingMode] = useState<'auto' | 'target_models' | 'enforce_tier' | 'enforce_model'>('auto');
   const [targetModelIds, setTargetModelIds] = useState<string[]>([]);
   const [enforcedTier, setEnforcedTier] = useState<ModelTier>('low');
@@ -93,12 +95,15 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
   const [showCostMatrix, setShowCostMatrix] = useState<boolean>(true);
   const [resultTab, setResultTab] = useState<'output' | 'explainability' | 'taxonomy' | 'token_reduction' | 'candidates'>('output');
   const [selectedProviderFilter, setSelectedProviderFilter] = useState<string>('all');
-  const [taskDistribution, setTaskDistribution] = useState<TaskProbabilityDistribution>(() => softClassifier.classify(PRESET_SAMPLE_PROMPTS[0].prompt));
+  const [taskDistribution, setTaskDistribution] = useState<TaskProbabilityDistribution>(() => softClassifier.classify(prefilledPrompt || ''));
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const [lastFeedbackType, setLastFeedbackType] = useState<FeedbackSignalType | null>(null);
   const [smartAutoRetry, setSmartAutoRetry] = useState<boolean>(true);
   const [simulateFailure, setSimulateFailure] = useState<boolean>(false);
   const [retryNotificationDismissed, setRetryNotificationDismissed] = useState<boolean>(false);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState<boolean>(false);
+  const [quotaModalData, setQuotaModalData] = useState<QuotaExhaustionData | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // Live classify prompt into 7-archetype probability distribution
   React.useEffect(() => {
@@ -145,6 +150,14 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
   // Trigger dispatch request
   const handleDispatch = async (forceSimulateFailure?: boolean) => {
     if (!prompt.trim() || isDispatching) return;
+
+    // Check if user is authenticated for free trial usage
+    const storedTrialUser = localStorage.getItem('whyor_trial_user');
+    if (!storedTrialUser && activePersona.role === 'analyst' && !byokKey) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     setIsDispatching(true);
     setRetryNotificationDismissed(false);
     setActiveStep(1);
@@ -191,8 +204,26 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
           }),
         });
 
-        if (res.ok) {
-          apiResponse = await res.json();
+        const data = await res.json();
+
+        if (!res.ok || data.errorType) {
+          if (data.errorType === 'daily_trial_exhausted' || data.errorType === 'provider_quota_exhausted') {
+            setQuotaModalData({
+              errorType: data.errorType,
+              title: data.errorType === 'daily_trial_exhausted' ? "Today's Free Trial Allowance Reached" : `${initialCandidate.name} Limit Reached`,
+              providerName: initialCandidate.provider,
+              modelName: initialCandidate.name,
+              businessMessage: data.businessFriendlyMessage || data.error || "Your free trial daily quota has been reached. Please come back tomorrow or connect your own subscription/API key.",
+              suggestedFallbackModel: 'gemini-3.7-flash',
+            });
+            setIsQuotaModalOpen(true);
+            setIsDispatching(false);
+            return;
+          }
+        }
+
+        if (res.ok && !data.error) {
+          apiResponse = data;
         }
       } catch (e) {
         console.warn('Backend call fallback to client engine:', e);
@@ -461,8 +492,9 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
       {consoleMode === 'corroborate' && (
         <CorroboratePanel
           prompt={prompt}
-          modelA={{ provider: 'google', modelId: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }}
-          modelB={{ provider: 'anthropic', modelId: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' }}
+          modelA={{ provider: 'google', modelId: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' }}
+          modelB={{ provider: 'google', modelId: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' }}
+          onNavigateTab={onNavigateTab}
         />
       )}
 
@@ -472,11 +504,16 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
 
       {consoleMode === 'single_shot' && (
         <>
-      {/* Preset Prompts Selector */}
+      {/* Optional Benchmark Presets Selector */}
       <div className="bg-slate-900/50 backdrop-blur-2xl border border-white/[0.08] rounded-2xl p-5 shadow-xl shadow-black/20">
-        <div className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <FileText className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Select Benchmark Test Prompts (Different Complexity Tiers & Capabilities):</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div className="text-xs font-mono text-slate-300 uppercase tracking-wider flex items-center gap-2 font-semibold">
+            <FileText className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Optional Reference Templates</span>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">
+            Click any template below to test automatic 7-archetype classification:
+          </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {PRESET_SAMPLE_PROMPTS.map((preset, idx) => (
@@ -508,21 +545,34 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
                 Prompt Payload
               </label>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-mono text-emerald-300 bg-emerald-500/15 border border-emerald-400/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
-                  <Activity className="w-2.5 h-2.5 text-emerald-400" />
-                  {TASK_ARCHETYPES[taskDistribution.primaryArchetype].name} ({(taskDistribution.confidence * 100).toFixed(0)}%)
-                </span>
-                <button
-                  onClick={() => setPrompt('')}
-                  className="text-[10px] font-mono text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-white/5 border border-white/10 transition-colors cursor-pointer"
-                  title="Clear Prompt Field"
-                >
-                  Clear
-                </button>
+                {prompt.trim() ? (
+                  <span className="text-[11px] font-mono text-emerald-300 bg-emerald-500/15 border border-emerald-400/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
+                    <Activity className="w-2.5 h-2.5 text-emerald-400" />
+                    {TASK_ARCHETYPES[taskDistribution.primaryArchetype].name} ({(taskDistribution.confidence * 100).toFixed(0)}%)
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-mono text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
+                    Awaiting Input
+                  </span>
+                )}
+                {prompt.trim() && (
+                  <button
+                    onClick={() => setPrompt('')}
+                    className="text-[10px] font-mono text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-white/5 border border-white/10 transition-colors cursor-pointer"
+                    title="Clear Prompt Field"
+                  >
+                    Clear
+                  </button>
+                )}
                 <span className="text-[11px] font-mono text-slate-400 px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
-                  ~{Math.ceil(prompt.split(/\s+/).filter(Boolean).length * 1.35)} Raw Tokens
+                  ~{prompt.trim() ? Math.ceil(prompt.split(/\s+/).filter(Boolean).length * 1.35) : 0} Raw Tokens
                 </span>
               </div>
+            </div>
+
+            {/* Instructional description explaining what goes in this box */}
+            <div className="mb-2.5 p-2.5 rounded-xl bg-slate-950/60 border border-white/[0.06] text-[11px] text-slate-300 font-sans leading-relaxed">
+              <span className="font-semibold text-amber-300 font-mono">What goes in this box:</span> Enter or paste any custom task prompt, natural language inquiry, system instructions, code to refactor, or complex document text. WhyOr will classify the task across 7 archetypes, estimate token density, and dispatch to the optimal model based on cost, latency, and reasoning depth.
             </div>
 
             <textarea
@@ -536,7 +586,7 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
                   handleDispatch();
                 }
               }}
-              placeholder="Type or paste any task, query, extraction, code, or reasoning prompt... (Press Cmd+Enter to dispatch)"
+              placeholder="Enter your prompt, complex question, analysis task, code snippet, or document text here...&#10;&#10;WhyOr will automatically determine task complexity, compress tokens, and dispatch to the optimal model. (Press ⌘+Enter or Ctrl+Enter to dispatch)"
               className="w-full bg-slate-950/60 border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm text-slate-100 font-mono focus:outline-none focus:border-amber-400/80 focus:ring-1 focus:ring-amber-400/40 resize-y transition-all leading-relaxed backdrop-blur-md"
             />
 
@@ -1486,6 +1536,38 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
       </div>
         </>
       )}
+
+      {/* Business-Friendly Quota Exhaustion & Rate Limit Modal */}
+      <QuotaExhaustionModal
+        isOpen={isQuotaModalOpen}
+        onClose={() => setIsQuotaModalOpen(false)}
+        data={quotaModalData}
+        onNavigateToCredentials={() => {
+          setIsQuotaModalOpen(false);
+          onNavigateTab?.('credentials');
+        }}
+        onNavigateToPricing={() => {
+          setIsQuotaModalOpen(false);
+          onNavigateTab?.('pricing');
+        }}
+        onSelectAlternativeModel={(altModelId) => {
+          setIsQuotaModalOpen(false);
+          setRoutingMode('enforce_model');
+          setEnforcedModelId(altModelId);
+        }}
+      />
+
+      {/* Auth Gate Modal for Free Trial Authentication */}
+      <AuthGateModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        title="Sign In to Access Free Trial Model Routing"
+        reason="To ensure equitable quota allocation, please sign in with Google Auth or verify your email address before dispatching free trial prompts."
+        onSuccess={() => {
+          setIsAuthModalOpen(false);
+          handleDispatch();
+        }}
+      />
     </div>
   );
 };

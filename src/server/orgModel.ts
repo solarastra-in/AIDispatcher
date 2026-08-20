@@ -3,6 +3,7 @@ export type OrgRole = "super_admin" | "company_admin" | "team_member";
 export interface UserAccount {
   id: string;
   email: string;
+  displayName?: string;
   role: OrgRole;
   companyId: string | null;      // null only for super_admin
   teamId: string | null;         // null for company_admin (company-wide) and super_admin
