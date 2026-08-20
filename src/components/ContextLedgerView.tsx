@@ -326,7 +326,27 @@ export const ContextLedgerView: React.FC<ContextLedgerViewProps> = ({
           </div>
 
           <div className="space-y-3">
-            {filteredLedger.map((entry, idx) => {
+            {filteredLedger.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-900/50 border border-white/[0.08] text-center space-y-3 font-mono">
+                <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-400/20 text-cyan-400 flex items-center justify-center mx-auto">
+                  <Database className="w-6 h-6" />
+                </div>
+                <h4 className="text-white text-sm font-semibold">No Context Ledger Blocks Recorded Yet</h4>
+                <p className="text-xs text-slate-400 font-sans max-w-md mx-auto leading-relaxed">
+                  WhyOr Dispatch creates a cryptographically linked (SHA-256) block for each prompt processed. Unlike traditional systems that repeatedly resend bloated quadratic chat transcripts, WhyOr extracts key entities, state graphs, and routing decisions into an immutable ledger—reducing multi-turn token consumption by up to 70%.
+                </p>
+                {onNavigateTab && (
+                  <button
+                    onClick={() => onNavigateTab('dispatch')}
+                    className="inline-flex items-center gap-2 px-4 py-2 mt-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 text-xs font-semibold hover:bg-cyan-500/30 transition-all cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Run Test Prompt in Dispatch Console</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredLedger.map((entry, idx) => {
               const isSelected = selectedEntry?.id === entry.id;
               return (
                 <div key={entry.id} className="relative">
@@ -395,7 +415,8 @@ export const ContextLedgerView: React.FC<ContextLedgerViewProps> = ({
                   </div>
                 </div>
               );
-            })}
+            })
+            )}
           </div>
         </div>
 
@@ -503,8 +524,14 @@ export const ContextLedgerView: React.FC<ContextLedgerViewProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="text-center py-12 text-slate-400 font-mono text-xs">
-                Select a block from the ledger to inspect its cryptographic hash and extracted entities.
+              <div className="text-center py-12 px-4 text-slate-400 font-mono text-xs space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 text-cyan-400 flex items-center justify-center mx-auto">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="font-semibold text-white">Cryptographic Block Inspector</div>
+                <p className="text-slate-400 font-sans text-xs max-w-xs mx-auto leading-relaxed">
+                  Select a block from the ledger to inspect its SHA-256 parent link, extracted entity graph, and verifiable token cost avoidance calculations.
+                </p>
               </div>
             )}
           </div>

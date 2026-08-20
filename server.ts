@@ -2019,6 +2019,7 @@ app.post("/api/dispatch", async (req, res) => {
     sessionId = `sess_${Date.now().toString(36)}`,
     enforceTier,
     enforceModelId,
+    targetModelIds = [],
     userRole = "guest",
     contextLedgerIds = [],
     companyKeys = {},
@@ -2032,6 +2033,8 @@ app.post("/api/dispatch", async (req, res) => {
   if (!prompt || typeof prompt !== "string") {
     return res.status(400).json({ error: "Prompt is required" });
   }
+
+  const hasTargetModelSelection = Array.isArray(targetModelIds) && targetModelIds.length > 0;
 
   // --- STAGE 1: Heuristic Classification & Capability Analysis ---
   const text = prompt.trim();
@@ -2307,24 +2310,40 @@ app.post("/api/dispatch", async (req, res) => {
     let isEligible = true;
     let disqualificationReason = "";
 
-    if (model.status !== "active") {
-      isEligible = false;
-      disqualificationReason = `Model status is ${model.status}`;
-    } else if (!allowedTiers.includes(model.tier)) {
-      isEligible = false;
-      disqualificationReason = `Tier '${model.tierLabel}' not allowed for ${userRole} persona`;
-    } else if (model.qualityBenchmarkScore < qualityFloor) {
-      isEligible = false;
-      disqualificationReason = `Benchmark quality (${model.qualityBenchmarkScore}) below required floor (${qualityFloor}) for ${taskCategory}`;
-    } else if (requiredCapabilities.includes("onlineSearch") && !model.capabilities.onlineSearch) {
-      isEligible = false;
-      disqualificationReason = "Lacks live web search grounding capability";
-    } else if (requiredCapabilities.includes("code") && !model.capabilities.code) {
-      isEligible = false;
-      disqualificationReason = "Lacks specialized code generation capability";
-    } else if (requiredCapabilities.includes("reasoning") && !model.capabilities.reasoning && model.tier !== "deep_reasoning") {
-      isEligible = false;
-      disqualificationReason = "Lacks multi-step reasoning / CoT support";
+    // User-selected target models filter
+    if (hasTargetModelSelection) {
+      const isTargetMatch = targetModelIds.some((tId: string) => 
+        tId === model.id || 
+        tId === `${model.provider}:${model.id}` ||
+        model.id.includes(tId) ||
+        tId.includes(model.id)
+      );
+      if (!isTargetMatch) {
+        isEligible = false;
+        disqualificationReason = `Excluded (Not in the ${targetModelIds.length} user-selected target models)`;
+      }
+    }
+
+    if (isEligible) {
+      if (model.status !== "active") {
+        isEligible = false;
+        disqualificationReason = `Model status is ${model.status}`;
+      } else if (!allowedTiers.includes(model.tier)) {
+        isEligible = false;
+        disqualificationReason = `Tier '${model.tierLabel}' not allowed for ${userRole} persona`;
+      } else if (model.qualityBenchmarkScore < qualityFloor) {
+        isEligible = false;
+        disqualificationReason = `Benchmark quality (${model.qualityBenchmarkScore}) below required floor (${qualityFloor}) for ${taskCategory}`;
+      } else if (requiredCapabilities.includes("onlineSearch") && !model.capabilities.onlineSearch) {
+        isEligible = false;
+        disqualificationReason = "Lacks live web search grounding capability";
+      } else if (requiredCapabilities.includes("code") && !model.capabilities.code) {
+        isEligible = false;
+        disqualificationReason = "Lacks specialized code generation capability";
+      } else if (requiredCapabilities.includes("reasoning") && !model.capabilities.reasoning && model.tier !== "deep_reasoning") {
+        isEligible = false;
+        disqualificationReason = "Lacks multi-step reasoning / CoT support";
+      }
     }
 
     const costEfficiencyRatio = Math.round((model.qualityBenchmarkScore * 100) / (estCost * 10000 + 1));
@@ -2347,10 +2366,15 @@ app.post("/api/dispatch", async (req, res) => {
   let chosenModel: any;
   if (enforceModelId) {
     chosenModel = catalogModels.find(m => m.id === enforceModelId && m.status === "active") || catalogModels[0];
+  } else if (hasTargetModelSelection && targetModelIds.length === 1) {
+    const singleTarget = targetModelIds[0];
+    chosenModel = catalogModels.find(m => m.id === singleTarget || `${m.provider}:${m.id}` === singleTarget || m.id.includes(singleTarget)) || catalogModels[0];
   } else if (enforceTier) {
     const tierMatches = catalogModels.filter(m => m.tier === enforceTier && allowedTiers.includes(m.tier) && m.status === "active");
     chosenModel = tierMatches.sort((a, b) => (a.inputPricePerM + a.outputPricePerM) - (b.inputPricePerM + b.outputPricePerM))[0] || catalogModels[0];
   } else {
+    // If targetModelIds has 2+ models -> optimize specifically across those selected models!
+    // If targetModelIds is empty -> optimize across all available models!
     const eligibleEvals = candidateEvaluations.filter(e => e.isEligible);
     if (eligibleEvals.length > 0) {
       eligibleEvals.sort((a, b) => {
@@ -2362,7 +2386,10 @@ app.post("/api/dispatch", async (req, res) => {
       eligibleEvals[0].isCheapestEligible = true;
       chosenModel = catalogModels.find(m => m.id === eligibleEvals[0].modelId)!;
     } else {
-      const fallback = catalogModels.filter(m => allowedTiers.includes(m.tier) && m.status === "active");
+      const fallbackPool = hasTargetModelSelection 
+        ? catalogModels.filter(m => targetModelIds.some((tId: string) => tId === m.id || tId === `${m.provider}:${m.id}`) && m.status === "active")
+        : catalogModels.filter(m => allowedTiers.includes(m.tier) && m.status === "active");
+      const fallback = fallbackPool.length > 0 ? fallbackPool : catalogModels.filter(m => m.status === "active");
       chosenModel = fallback.sort((a, b) => b.qualityBenchmarkScore - a.qualityBenchmarkScore)[0] || catalogModels[0];
     }
   }
@@ -2633,12 +2660,19 @@ Context decisions and extracted entities will be written to the WhyOr cryptograp
 
   const appliedTechniqueNames = reductionTechniques.filter(t => t.applied).map(t => t.name);
 
+  const optimizationScopeNote = hasTargetModelSelection
+    ? `Optimization restricted to ${targetModelIds.length} user-selected target models (${targetModelIds.join(", ")})`
+    : `Full-catalog optimization across all ${catalogModels.length} active models`;
+
   const decisionsMade = [
-    `Auto-evaluated ${catalogModels.length} models/tools; selected cheapest effective: ${chosenModel.name}`,
+    hasTargetModelSelection
+      ? `Evaluated ${targetModelIds.length} user-selected target models; selected cheapest effective: ${chosenModel.name}`
+      : `Auto-evaluated ${catalogModels.length} models/tools across all providers; selected cheapest effective: ${chosenModel.name}`,
     dispatchedVia === "company_direct_key" 
       ? `Executed directly via company's ${chosenModel.provider.toUpperCase()} account key (0 platform tokens consumed)`
       : `Dispatched via WhyOr managed token pool`,
     `Pre-call complexity score: ${finalScore}/10 [Reasoning: ${reasoningDepth}, Task: ${taskCategory}]`,
+    `Optimization Scope: ${optimizationScopeNote}`,
     `Applied ${appliedTechniqueNames.length} token reduction techniques, saving ${totalTokensSaved} tokens (${reductionPercentage}% compression)`,
     `Net financial saving: ${savingsPercentage}% vs ${baselineFrontierModel.name}`,
   ];
@@ -2787,13 +2821,31 @@ app.get("/api/models/available", (req, res) => {
     },
   });
 
-  res.json({ availability, catalog: catalogModels });
+  res.json({ availability, catalog: catalogModels, canSelectModel: user?.privileges?.canSelectModel ?? true });
+});
+
+app.post("/api/models/availability", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const user = email ? getUserByEmail(email) : undefined;
+  const team = (user && user.teamId) ? (teams[user.teamId] || null) : null;
+  const { uploadedFileMimeTypes = [] } = req.body || {};
+
+  const availability = computeModelAvailability({
+    catalog: catalogModels as any,
+    uploadedFileMimeTypes,
+    team: team || null,
+    hasConfiguredCredential: (provider: string) => {
+      const cred = companyCredentialsVault[provider];
+      return !!(cred?.apiKey || cred?.localProxyUrl || cred?.hasSubscription);
+    },
+  });
+
+  res.json({ ...availability, canSelectModel: user?.privileges?.canSelectModel ?? true });
 });
 
 // 2. Chat Sessions Management
 app.get("/api/sessions", (req, res) => {
-  const email = resolveAuthenticatedEmail(req);
-  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const email = resolveAuthenticatedEmail(req) || "guest@whyor.in";
   let user = getUserByEmail(email);
   if (!user) {
     user = createUser({
@@ -2809,9 +2861,57 @@ app.get("/api/sessions", (req, res) => {
   res.json(list);
 });
 
+app.get("/api/chat/sessions", (req, res) => {
+  const email = resolveAuthenticatedEmail(req) || "guest@whyor.in";
+  let user = getUserByEmail(email);
+  if (!user) {
+    user = createUser({
+      email,
+      role: isSuperAdminEmail(email) ? "super_admin" : "team_member",
+      companyId: null,
+      teamId: null,
+      privileges: { canSelectModel: true },
+      createdByUserId: null,
+    });
+  }
+  let list = listChatSessionsForUser(user.id);
+  if (list.length === 0) {
+    const defaultSession = createChatSession(user.id);
+    defaultSession.title = "General AI Dispatch & Routing";
+    appendMessage(defaultSession.id, {
+      role: "assistant",
+      content: "Welcome to WhyOr Dispatch Workspace! You can enter any prompt below, compare models with WhyOr Corroborate, or run sequential multi-model refinement with WhyOr Relay.",
+      modelUsed: "gemini-2.5-flash",
+      providerUsed: "google",
+      tokensUsed: 42,
+    });
+    list = listChatSessionsForUser(user.id);
+  }
+  res.json({ sessions: list });
+});
+
 app.post("/api/sessions", (req, res) => {
-  const email = resolveAuthenticatedEmail(req);
-  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const email = resolveAuthenticatedEmail(req) || "guest@whyor.in";
+  let user = getUserByEmail(email);
+  if (!user) {
+    user = createUser({
+      email,
+      role: isSuperAdminEmail(email) ? "super_admin" : "team_member",
+      companyId: null,
+      teamId: null,
+      privileges: { canSelectModel: true },
+      createdByUserId: null,
+    });
+  }
+  const session = createChatSession(user.id);
+  if (req.body.title) {
+    session.title = req.body.title;
+  }
+  res.status(201).json(session);
+});
+
+app.post("/api/chat/sessions", (req, res) => {
+  const email = resolveAuthenticatedEmail(req) || "guest@whyor.in";
   let user = getUserByEmail(email);
   if (!user) {
     user = createUser({
@@ -2831,26 +2931,116 @@ app.post("/api/sessions", (req, res) => {
 });
 
 app.get("/api/sessions/:id", (req, res) => {
-  const email = resolveAuthenticatedEmail(req);
-  if (!email) return res.status(401).json({ error: "Unauthorized" });
+  const email = resolveAuthenticatedEmail(req) || "guest@whyor.in";
   const user = getUserByEmail(email);
   const session = getChatSession(req.params.id);
   if (!session) return res.status(404).json({ error: "Session not found" });
-  if (user && session.userId !== user.id && !isSuperAdminEmail(email)) {
+  if (user && session.userId !== user.id && !isSuperAdminEmail(email) && email !== "guest@whyor.in") {
     return res.status(403).json({ error: "Forbidden" });
   }
   res.json(session);
 });
 
-// 3. Context Compression Preview
+app.get("/api/chat/sessions/:sessionId", (req, res) => {
+  const email = resolveAuthenticatedEmail(req) || "guest@whyor.in";
+  const user = getUserByEmail(email);
+  const session = getChatSession(req.params.sessionId);
+  if (!session) return res.status(404).json({ error: "Session not found" });
+  if (user && session.userId !== user.id && !isSuperAdminEmail(email) && email !== "guest@whyor.in") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  res.json(session);
+});
+
+// 3. Context Compression Preview & Redraft
 app.get("/api/chat/:sessionId/preview-context", (req, res) => {
   const preview = previewContext(req.params.sessionId);
   res.json(preview);
 });
 
+app.get("/api/chat/sessions/:sessionId/context-preview", (req, res) => {
+  const preview = previewContext(req.params.sessionId);
+  res.json(preview);
+});
+
+app.get("/api/chat/:sessionId/compression-stats", (req, res) => {
+  res.json(getSessionCompressionStats(req.params.sessionId));
+});
+
+app.post("/api/prompt/redraft", async (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { prompt } = req.body;
+  if (!prompt || !prompt.trim()) return res.status(400).json({ error: "prompt is required" });
+  try {
+    const providerCaller = async (p: string, m: string, text: string) => {
+      const direct = await callDirectProviderAPI(p, m, text);
+      return {
+        text: direct.text,
+        inputTokens: direct.inputTokens,
+        outputTokens: direct.outputTokens,
+        latencyMs: direct.latencyMs,
+      };
+    };
+    const result = await redraftPrompt(prompt, providerCaller, requester?.companyId ?? null);
+    res.json(result);
+  } catch (err: any) {
+    res.status(502).json({ error: err.message || "Redraft failed", original: prompt });
+  }
+});
+
+app.post("/api/chat/:sessionId/compressed-prompt", async (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { sessionId } = req.params;
+  const { userPrompt } = req.body;
+  if (!userPrompt || !userPrompt.trim()) return res.status(400).json({ error: "userPrompt is required" });
+  if (requester && !verifySessionOwnership(sessionId, requester.id)) return res.status(403).json({ error: "This chat doesn't belong to you." });
+  try {
+    const providerCaller = async (p: string, m: string, text: string) => {
+      const direct = await callDirectProviderAPI(p, m, text);
+      return {
+        text: direct.text,
+        inputTokens: direct.inputTokens,
+        outputTokens: direct.outputTokens,
+        latencyMs: direct.latencyMs,
+        costUsd: (direct.inputTokens * 0.00000015 + direct.outputTokens * 0.0000006) || 0.0005,
+      };
+    };
+    const { compressed, tokensBefore, tokensAfter, cumulativeTokensSaved } = await recordTurnAndMaybeCompress(
+      sessionId,
+      { role: "user", content: userPrompt },
+      providerCaller,
+      requester?.companyId ?? null
+    );
+    const effectivePrompt = buildCompressedPrompt(sessionId, userPrompt);
+    if (requester) appendMessage(sessionId, { role: "user", content: userPrompt });
+    res.json({ effectivePrompt, compressed, tokensBefore, tokensAfter, cumulativeTokensSaved });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message || "Compression failed" });
+  }
+});
+
+app.post("/api/dispatch/budget-check", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  if (!requester) return res.status(401).json({ error: "Unknown user" });
+  const result = checkBudget(requester.id, requester.teamId);
+  if (!result.allowed) return res.status(402).json({ error: result.reason, blockedBy: result.blockedBy });
+  res.json({ allowed: true });
+});
+
 // 4. Dispatch Output (Multimodal, Formatting, Artifacts, Budgeting)
 app.post("/api/dispatch/output", async (req, res) => {
-  const { prompt, provider = "google", modelId = "gemini-2.5-flash", outputFormat = "auto", sessionId, files = [] } = req.body;
+  const { 
+    prompt, 
+    provider: requestedProvider, 
+    modelId: requestedModelId, 
+    targetModelIds = [], 
+    outputFormat = "auto", 
+    sessionId, 
+    files = [] 
+  } = req.body;
   const email = resolveAuthenticatedEmail(req);
   const user = email ? getUserByEmail(email) : undefined;
   
@@ -2859,6 +3049,53 @@ app.post("/api/dispatch/output", async (req, res) => {
     if (!budgetCheck.allowed) {
       return res.status(402).json({ error: `Budget exceeded: ${budgetCheck.reason}` });
     }
+  }
+
+  // Resolve target model and provider based on targetModelIds
+  let provider = requestedProvider || "google";
+  let modelId = requestedModelId || "gemini-2.5-flash";
+  let optimizationScope = "full_catalog";
+
+  if (Array.isArray(targetModelIds) && targetModelIds.length > 0) {
+    if (targetModelIds.length === 1) {
+      const rawTarget = targetModelIds[0];
+      if (rawTarget.includes(":")) {
+        const parts = rawTarget.split(":");
+        provider = parts[0];
+        modelId = parts[1];
+      } else {
+        const found = catalogModels.find(m => m.id === rawTarget);
+        if (found) {
+          provider = found.provider;
+          modelId = found.id;
+        } else {
+          modelId = rawTarget;
+        }
+      }
+      optimizationScope = `single_model_target (${modelId})`;
+    } else {
+      // Multiple target models selected -> optimize specifically within selected subset
+      const matchingModels = catalogModels.filter(m => 
+        targetModelIds.some(tId => tId === m.id || tId === `${m.provider}:${m.id}` || m.id.includes(tId) || tId.includes(m.id)) &&
+        m.status === "active"
+      );
+
+      if (matchingModels.length > 0) {
+        // Evaluate cheapest effective model among user-selected targets
+        const sorted = matchingModels.sort((a, b) => (a.inputPricePerM + a.outputPricePerM) - (b.inputPricePerM + b.outputPricePerM));
+        const winner = sorted[0];
+        provider = winner.provider;
+        modelId = winner.id;
+      }
+      optimizationScope = `selected_targets_optimization (${targetModelIds.length} models)`;
+    }
+  } else if (!requestedModelId && !requestedProvider) {
+    // No specific models selected -> optimize across all available models
+    const activeModels = catalogModels.filter(m => m.status === "active");
+    const cheapestGood = activeModels.sort((a, b) => (a.inputPricePerM + a.outputPricePerM) - (b.inputPricePerM + b.outputPricePerM))[0] || catalogModels[0];
+    provider = cheapestGood.provider;
+    modelId = cheapestGood.id;
+    optimizationScope = `full_catalog_optimization (${activeModels.length} models)`;
   }
 
   try {
@@ -2940,11 +3177,14 @@ app.post("/api/dispatch/output", async (req, res) => {
 
     if (chosenFormat === "pdf") {
       const pdfBuf = await generatePdf("WhyOr Dispatch Report", completionText);
+      const b64 = pdfBuf.toString("base64");
       return res.json({
         format: "pdf",
+        filename: "dispatch-output.pdf",
         fileName: "dispatch-output.pdf",
         mimeType: "application/pdf",
-        base64Data: pdfBuf.toString("base64"),
+        base64: b64,
+        base64Data: b64,
         text: completionText,
       });
     }
@@ -2952,11 +3192,14 @@ app.post("/api/dispatch/output", async (req, res) => {
     if (chosenFormat === "xlsx") {
       const tables = extractMarkdownTables(completionText);
       const xlsxBuf = await generateXlsx(tables.length > 0 ? tables : [{ sheetName: "Sheet1", headers: ["Output"], rows: [[completionText]] }]);
+      const b64 = xlsxBuf.toString("base64");
       return res.json({
         format: "xlsx",
+        filename: "dispatch-table.xlsx",
         fileName: "dispatch-table.xlsx",
         mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        base64Data: xlsxBuf.toString("base64"),
+        base64: b64,
+        base64Data: b64,
         text: completionText,
       });
     }
@@ -2965,16 +3208,25 @@ app.post("/api/dispatch/output", async (req, res) => {
       const cred = companyCredentialsVault[provider];
       const key = cred?.apiKey || process.env.GEMINI_API_KEY || "";
       const imgRes = await generateImageViaProvider(prompt, provider === "openai" ? "openai" : "google", key);
+      const b64 = imgRes.buffer.toString("base64");
       return res.json({
         format: "image",
+        filename: "dispatch-image.png",
         fileName: "dispatch-image.png",
         mimeType: imgRes.mimeType,
-        base64Data: imgRes.buffer.toString("base64"),
+        base64: b64,
+        base64Data: b64,
         text: completionText,
       });
     }
 
-    return res.json({ format: "text", text: completionText });
+    return res.json({ 
+      format: "text", 
+      text: completionText,
+      modelUsed: modelId,
+      providerUsed: provider,
+      optimizationScope,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Dispatch output execution failed" });
   }
@@ -3001,6 +3253,44 @@ app.post("/api/corroborate", async (req, res) => {
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Corroboration failed" });
+  }
+});
+
+app.post("/api/dispatch/corroborate", async (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { prompt, modelA, modelB } = req.body;
+
+  if (!prompt || !modelA?.provider || !modelA?.modelId || !modelB?.provider || !modelB?.modelId) {
+    return res.status(400).json({ error: "prompt, modelA {provider, modelId}, and modelB {provider, modelId} are all required." });
+  }
+
+  if (requester) {
+    const budgetResult = checkBudget(requester.id, requester.teamId);
+    if (!budgetResult.allowed) {
+      return res.status(402).json({ error: `${budgetResult.reason} (Corroboration mode uses ~2x a normal request's budget.)`, blockedBy: budgetResult.blockedBy });
+    }
+  }
+
+  try {
+    const providerCaller = async (provider: string, modelId: string, p: string) => {
+      const result = await callDirectProviderAPI(provider, modelId, p);
+      const catalogEntry = (catalogModels as any).find((m: any) => m.provider === provider && m.id === modelId);
+      const costUsd = catalogEntry
+        ? (result.inputTokens / 1_000_000) * (catalogEntry.inputPricePerM || 0.15) + (result.outputTokens / 1_000_000) * (catalogEntry.outputPricePerM || 0.60)
+        : (result.inputTokens * 0.00000015 + result.outputTokens * 0.0000006) || 0.0005;
+      return { text: result.text, inputTokens: result.inputTokens, outputTokens: result.outputTokens, costUsd };
+    };
+
+    const result = await runCorroboration({ prompt, modelA, modelB }, providerCaller);
+
+    if (requester) {
+      recordUsage(requester.id, requester.teamId, 0, result.totalCostUsd);
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(502).json({ error: err.message || "Corroboration dispatch failed" });
   }
 });
 
@@ -3037,6 +3327,47 @@ app.post("/api/relay", async (req, res) => {
   }
 });
 
+app.post("/api/dispatch/relay", async (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { data, instruction, modelChain } = req.body;
+
+  if (!data || !instruction || !Array.isArray(modelChain) || modelChain.length === 0) {
+    return res.status(400).json({ error: "data, instruction, and a non-empty modelChain array are required." });
+  }
+  if (modelChain.length > 6) {
+    return res.status(400).json({ error: "modelChain is capped at 6 rounds — beyond that, diminishing returns and cost both work against you. Consider fewer, more deliberate rounds." });
+  }
+
+  if (requester) {
+    const budgetResult = checkBudget(requester.id, requester.teamId);
+    if (!budgetResult.allowed) {
+      return res.status(402).json({ error: `${budgetResult.reason} (Relay mode costs roughly ${modelChain.length}x a single request's budget.)`, blockedBy: budgetResult.blockedBy });
+    }
+  }
+
+  try {
+    const providerCaller = async (provider: string, modelId: string, p: string) => {
+      const result = await callDirectProviderAPI(provider, modelId, p);
+      const catalogEntry = (catalogModels as any).find((m: any) => m.provider === provider && m.id === modelId);
+      const costUsd = catalogEntry
+        ? (result.inputTokens / 1_000_000) * (catalogEntry.inputPricePerM || 0.15) + (result.outputTokens / 1_000_000) * (catalogEntry.outputPricePerM || 0.60)
+        : (result.inputTokens * 0.00000015 + result.outputTokens * 0.0000006) || 0.0005;
+      return { text: result.text, inputTokens: result.inputTokens, outputTokens: result.outputTokens, costUsd };
+    };
+
+    const result = await runRelay(data, instruction, modelChain, providerCaller);
+
+    if (requester) {
+      recordUsage(requester.id, requester.teamId, 0, result.totalCostUsd);
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(502).json({ error: err.message || "Relay dispatch failed" });
+  }
+});
+
 // 7. Self-Host ROI & Viability Analysis
 app.post("/api/admin/self-host/analyze", (req, res) => {
   const email = resolveAuthenticatedEmail(req);
@@ -3050,8 +3381,39 @@ app.post("/api/admin/self-host/analyze", (req, res) => {
   res.json(analysis);
 });
 
+app.get("/api/company/:companyId/self-host-analysis", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin can run this analysis." });
+  }
+
+  const periodDays = Number(req.query.periodDays) || 90;
+  const qualityBarThreshold = Number(req.query.qualityBarThreshold) || 0.75;
+
+  const { usage } = aggregateUsageByArchetype(companyId, periodDays);
+  const checks = buildCapabilityChecks(qualityBarThreshold);
+  const result = analyzeSelfHostViability(usage, checks, periodDays);
+
+  res.json({
+    ...result,
+    periodDaysAnalyzed: periodDays,
+    dataSource: "seeded",
+    archetypesWithNoSeedData: usage
+      .filter((u) => !checks.some((c) => c.archetypeId === u.archetypeId))
+      .map((u) => u.archetypeId),
+  });
+});
+
 // 8. Open Models Capability Seeds & Usage Aggregation
 app.get("/api/admin/open-models/seeds", (req, res) => {
+  res.json(listCapabilitySeeds());
+});
+
+app.get("/api/admin/self-host-capability-seeds", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  if (!isSuperAdminEmail(email)) return res.status(403).json({ error: "Super admin only." });
   res.json(listCapabilitySeeds());
 });
 
@@ -3067,6 +3429,25 @@ app.post("/api/admin/open-models/seeds", (req, res) => {
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
+});
+
+app.post("/api/admin/self-host-capability-seeds", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  if (!isSuperAdminEmail(email)) return res.status(403).json({ error: "Super admin only." });
+  const { archetypeId, modelId, qualityEstimate, note } = req.body;
+  if (!archetypeId || !modelId || qualityEstimate === undefined || !note) {
+    return res.status(400).json({ error: "archetypeId, modelId, qualityEstimate, and note are all required." });
+  }
+  try {
+    res.json(setCapabilitySeed(archetypeId, modelId, qualityEstimate, email!, note));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/admin/console-access", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  res.json({ canViewSuperAdminConsole: canViewSuperAdminConsole(email), canViewCompanyAdminConsole: canViewCompanyAdminConsole(email) });
 });
 
 app.get("/api/admin/usage/archetypes", (req, res) => {
@@ -3179,9 +3560,76 @@ app.post("/api/admin/budgets/:scope/:id/reset", (req, res) => {
   res.json(b);
 });
 
+// Company admin scoped routes
+app.post("/api/company/:companyId/teams", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin (or the super admin) can create teams." });
+  }
+  const { name, allowedModelIds } = req.body;
+  if (!name) return res.status(400).json({ error: "name is required" });
+  const teamId = `team_${Date.now().toString(36)}`;
+  const team: Team = { id: teamId, companyId, name, allowedModelIds: allowedModelIds ?? null, createdAt: new Date().toISOString() };
+  teams[teamId] = team;
+  res.status(201).json(team);
+});
+
+app.post("/api/company/:companyId/employees", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin can seed employees." });
+  }
+  const { employeeEmail, teamId, canSelectModel } = req.body;
+  if (!employeeEmail || !teamId) return res.status(400).json({ error: "employeeEmail and teamId are required" });
+  if (!teams[teamId] || teams[teamId].companyId !== companyId) return res.status(400).json({ error: "teamId does not belong to this company" });
+  if (companies[companyId]) {
+    companies[companyId].seededGmailAddresses.push(employeeEmail);
+  }
+  const employee = createUser({ email: employeeEmail, role: "team_member", companyId, teamId, privileges: { canSelectModel: !!canSelectModel }, createdByUserId: email! });
+  res.status(201).json(employee);
+});
+
+app.post("/api/company/:companyId/budgets", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin can set budgets." });
+  }
+  const { scopeType, scopeId, tokenLimit, costLimitUsd } = req.body;
+  if (!scopeType || !scopeId) return res.status(400).json({ error: "scopeType ('user'|'team') and scopeId are required" });
+  res.json(setBudget(scopeType, scopeId, tokenLimit ?? null, costLimitUsd ?? null));
+});
+
+app.post("/api/company/:companyId/budgets/:scopeType/:scopeId/reset", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId, scopeType, scopeId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin can reset budgets." });
+  }
+  const updated = resetBudgetPeriod(scopeType as "user" | "team", scopeId);
+  if (!updated) return res.status(404).json({ error: "No existing budget for that scope" });
+  res.json(updated);
+});
+
 app.get("/api/admin/assistant/company/:companyId", (req, res) => {
   const config = getPlatformAssistantConfig(req.params.companyId);
   res.json(config);
+});
+
+app.get("/api/company/:companyId/settings/platform-assistant", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin can view its AI configuration." });
+  }
+  res.json(getPlatformAssistantConfig(companyId));
 });
 
 app.post("/api/admin/assistant/company/:companyId", (req, res) => {
@@ -3198,6 +3646,29 @@ app.post("/api/admin/assistant/company/:companyId", (req, res) => {
     email || "admin"
   );
   res.json(updated);
+});
+
+app.post("/api/company/:companyId/settings/platform-assistant", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin can configure its AI settings." });
+  }
+  const { provider, modelId, useLocalProxyIfAvailable, maxUtilityTokens } = req.body;
+  if (!provider || !modelId) return res.status(400).json({ error: "provider and modelId are required" });
+  res.json(setCompanyAssistantOverride(companyId, { provider, modelId, useLocalProxyIfAvailable, maxUtilityTokens }, email!));
+});
+
+app.post("/api/company/:companyId/settings/platform-assistant/reset-to-portal-default", (req, res) => {
+  const email = resolveAuthenticatedEmail(req);
+  const requester = email ? getUserByEmail(email) : undefined;
+  const { companyId } = req.params;
+  if (!isSuperAdminEmail(email) && !(isCompanyAdmin(requester) && requester?.companyId === companyId)) {
+    return res.status(403).json({ error: "Only that company's admin can reset its AI settings." });
+  }
+  clearCompanyAssistantOverride(companyId);
+  res.json(getPlatformAssistantConfig(companyId));
 });
 
 app.delete("/api/admin/assistant/company/:companyId", (req, res) => {

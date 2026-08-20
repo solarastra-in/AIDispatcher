@@ -253,7 +253,30 @@ Thank you for choosing WhyOr Dispatch Intelligent AI Router.
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
-              {invoices.map((inv) => (
+              {invoices.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 px-4 text-center">
+                    <div className="max-w-md mx-auto space-y-3 font-mono">
+                      <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-400/20 text-cyan-400 flex items-center justify-center mx-auto">
+                        <CreditCard className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-white text-sm font-semibold">No Invoices or Payment Records Yet</h4>
+                      <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                        Enterprise billing tracks token pool allocations, automated invoice generation, and cost avoidance reporting across all team members and departments.
+                      </p>
+                      <div className="flex items-center justify-center gap-3 pt-2">
+                        <button
+                          onClick={() => setShowTopUpModal(true)}
+                          className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/30 text-xs font-semibold transition-all cursor-pointer"
+                        >
+                          + Top-Up Token Allocation
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                invoices.map((inv) => (
                 <tr
                   key={inv.id}
                   onClick={() => setSelectedInvoice(inv)}
@@ -300,7 +323,8 @@ Thank you for choosing WhyOr Dispatch Intelligent AI Router.
                     </div>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         </div>

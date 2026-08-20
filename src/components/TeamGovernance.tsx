@@ -264,7 +264,30 @@ export const TeamGovernance: React.FC<TeamGovernanceProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
-              {team.members.map((m) => {
+              {team.members.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 px-4 text-center">
+                    <div className="max-w-md mx-auto space-y-3 font-mono">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-400/20 text-amber-400 flex items-center justify-center mx-auto">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-white text-sm font-semibold">No Team Members Registered Yet</h4>
+                      <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                        Team governance provides fine-grained model access control, monthly token quotas, role-based budget caps, and cryptographic auditability across your organization.
+                      </p>
+                      <div className="flex items-center justify-center gap-3 pt-2">
+                        <button
+                          onClick={() => setShowInviteModal(true)}
+                          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer"
+                        >
+                          + Add Team Member
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                team.members.map((m) => {
                 const usedPct = (m.monthlyTokensUsed / m.monthlyTokenQuota) * 100;
                 return (
                   <tr key={m.id} className="hover:bg-white/[0.04] transition-colors">
@@ -340,7 +363,8 @@ export const TeamGovernance: React.FC<TeamGovernanceProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>

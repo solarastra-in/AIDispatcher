@@ -38,11 +38,13 @@ export class ThompsonDecisionEngine {
     estimatedInputTokens = 500,
     estimatedOutputTokens = 300,
     enforceModelId?: string,
-    enforceTier?: ModelTier
+    enforceTier?: ModelTier,
+    targetModelIds?: string[]
   ): ThompsonRoutingDecision {
     const activeModels = models.filter(m => m.status === 'active');
     const primaryArch = TASK_ARCHETYPES[taskDistribution.primaryArchetype];
     const reqCapabilities = primaryArch.requiredCapabilities;
+    const hasTargetModels = Boolean(targetModelIds && targetModelIds.length > 0);
 
     // 1. Evaluate all candidates with Thompson sampling and cost metrics
     const candidates: ModelCandidateDecision[] = activeModels.map((model) => {
@@ -52,6 +54,15 @@ export class ThompsonDecisionEngine {
 
       let isEligible = true;
       let disqualificationReason: string | undefined = undefined;
+
+      // Target models filter check (if user selected specific target model subset)
+      if (hasTargetModels) {
+        const isTargetMatch = targetModelIds!.some(tId => tId === model.id || tId === `${model.provider}:${model.id}`);
+        if (!isTargetMatch) {
+          isEligible = false;
+          disqualificationReason = `Excluded (Not in the ${targetModelIds!.length} user-selected target models)`;
+        }
+      }
 
       // Tier check
       if (enforceTier && model.tier !== enforceTier) {

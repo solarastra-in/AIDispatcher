@@ -14,6 +14,9 @@ import { TASK_ARCHETYPES, TaskArchetypeId } from '../core/taskTaxonomy';
 import { apiService } from '../core/apiSurface';
 import { FEEDBACK_SIGNALS, FeedbackSignalType } from '../core/feedbackEngine';
 import { AutoRoutingExplainabilityPanel } from './AutoRoutingExplainabilityPanel';
+import Workspace from '../pages/Workspace';
+import CorroboratePanel from './CorroboratePanel';
+import RelayPanel from './RelayPanel';
 import { 
   Send, 
   Sparkles, 
@@ -48,7 +51,10 @@ import {
   Activity,
   AlertTriangle,
   X,
-  RefreshCw
+  RefreshCw,
+  MessageSquare,
+  GitCompare,
+  LayoutDashboard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -73,8 +79,10 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
   prefilledModelId,
   onClearPrefill,
 }) => {
+  const [consoleMode, setConsoleMode] = useState<'chat' | 'single_shot' | 'corroborate' | 'relay'>('chat');
   const [prompt, setPrompt] = useState<string>(PRESET_SAMPLE_PROMPTS[0].prompt);
-  const [routingMode, setRoutingMode] = useState<'auto' | 'enforce_tier' | 'enforce_model'>('auto');
+  const [routingMode, setRoutingMode] = useState<'auto' | 'target_models' | 'enforce_tier' | 'enforce_model'>('auto');
+  const [targetModelIds, setTargetModelIds] = useState<string[]>([]);
   const [enforcedTier, setEnforcedTier] = useState<ModelTier>('low');
   const [enforcedModelId, setEnforcedModelId] = useState<string>(models[0]?.id || 'gemini-3.7-flash');
   const [byokKey, setByokKey] = useState<string>('');
@@ -173,6 +181,7 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
             sessionId: recentLedger[0]?.sessionId || `sess_${Date.now().toString(36)}`,
             enforceTier: routingMode === 'enforce_tier' ? enforcedTier : undefined,
             enforceModelId: routingMode === 'enforce_model' ? enforcedModelId : undefined,
+            targetModelIds: routingMode === 'target_models' ? targetModelIds : undefined,
             userRole: activePersona.role,
             byokKey: activePersona.canBYOK ? byokKey : undefined,
             enableSmartAutoRetry: smartAutoRetry,
@@ -382,8 +391,87 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Console Sub-Mode Selector */}
+        <div className="flex flex-wrap items-center bg-slate-950/80 p-1.5 rounded-xl border border-white/10 shrink-0 gap-1 mt-4">
+          <button
+            id="console-mode-chat-btn"
+            onClick={() => setConsoleMode('chat')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              consoleMode === 'chat'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Interactive AI Chat</span>
+          </button>
+
+          <button
+            id="console-mode-single-shot-btn"
+            onClick={() => setConsoleMode('single_shot')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              consoleMode === 'single_shot'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Router & Payload Inspector</span>
+          </button>
+
+          <button
+            id="console-mode-corroborate-btn"
+            onClick={() => setConsoleMode('corroborate')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              consoleMode === 'corroborate'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`}
+          >
+            <GitCompare className="w-3.5 h-3.5" />
+            <span>WhyOr Corroborate</span>
+          </button>
+
+          <button
+            id="console-mode-relay-btn"
+            onClick={() => setConsoleMode('relay')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              consoleMode === 'relay'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>WhyOr Relay</span>
+          </button>
+        </div>
       </div>
 
+      {consoleMode === 'chat' && (
+        <Workspace
+          prefilledPrompt={prefilledPrompt || prompt}
+          prefilledModelId={prefilledModelId}
+          onClearPrefill={onClearPrefill}
+          onNewLedgerEntry={onNewLedgerEntry}
+          onNavigateTab={onNavigateTab}
+        />
+      )}
+
+      {consoleMode === 'corroborate' && (
+        <CorroboratePanel
+          prompt={prompt}
+          modelA={{ provider: 'google', modelId: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }}
+          modelB={{ provider: 'anthropic', modelId: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' }}
+        />
+      )}
+
+      {consoleMode === 'relay' && (
+        <RelayPanel />
+      )}
+
+      {consoleMode === 'single_shot' && (
+        <>
       {/* Preset Prompts Selector */}
       <div className="bg-slate-900/50 backdrop-blur-2xl border border-white/[0.08] rounded-2xl p-5 shadow-xl shadow-black/20">
         <div className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -453,65 +541,138 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
             />
 
             {/* Routing Mode Selector */}
-            <div className="mt-4 pt-4 border-t border-white/[0.08] grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="text-[11px] font-mono text-slate-400 block mb-1">ROUTING STRATEGY</label>
-                <select
-                  id="routing-strategy-select"
-                  value={routingMode}
-                  onChange={(e) => setRoutingMode(e.target.value as any)}
-                  className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 backdrop-blur-md cursor-pointer"
-                >
-                  <option value="auto">✨ Auto 2-Stage Optimizer</option>
-                  <option value="enforce_tier">🔒 Enforce Specific Tier</option>
-                  <option value="enforce_model">🎯 Enforce Specific Model</option>
-                </select>
+            <div className="mt-4 pt-4 border-t border-white/[0.08] space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-mono text-slate-400 block mb-1">ROUTING STRATEGY</label>
+                  <select
+                    id="routing-strategy-select"
+                    value={routingMode}
+                    onChange={(e) => setRoutingMode(e.target.value as any)}
+                    className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 backdrop-blur-md cursor-pointer"
+                  >
+                    <option value="auto">✨ Full-Catalog Auto-Optimizer (All Models)</option>
+                    <option value="target_models">🎯 Specific Target Models (Sub-Pool Optimization)</option>
+                    <option value="enforce_tier">🔒 Enforce Specific Tier</option>
+                    <option value="enforce_model">📌 Enforce Single Model</option>
+                  </select>
+                </div>
+
+                {routingMode === 'enforce_tier' && (
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-400 block mb-1">ENFORCE TIER</label>
+                    <select
+                      id="enforce-tier-select"
+                      value={enforcedTier}
+                      onChange={(e) => setEnforcedTier(e.target.value as any)}
+                      className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 backdrop-blur-md cursor-pointer"
+                    >
+                      {activePersona.allowedTiers.map((t) => (
+                        <option key={t} value={t}>{t.toUpperCase()}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {routingMode === 'enforce_model' && (
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-400 block mb-1">ENFORCE MODEL</label>
+                    <select
+                      id="enforce-model-select"
+                      value={enforcedModelId}
+                      onChange={(e) => setEnforcedModelId(e.target.value)}
+                      className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 backdrop-blur-md cursor-pointer"
+                    >
+                      {models
+                        .filter((m) => activePersona.allowedTiers.includes(m.tier))
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.tierLabel})</option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
+                {activePersona.canBYOK && (
+                  <div>
+                    <label className="text-[11px] font-mono text-slate-400 block mb-1">CUSTOM BYOK KEY (OPTIONAL)</label>
+                    <input
+                      type="password"
+                      value={byokKey}
+                      onChange={(e) => setByokKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400 backdrop-blur-md"
+                    />
+                  </div>
+                )}
               </div>
 
-              {routingMode === 'enforce_tier' && (
-                <div>
-                  <label className="text-[11px] font-mono text-slate-400 block mb-1">ENFORCE TIER</label>
-                  <select
-                    id="enforce-tier-select"
-                    value={enforcedTier}
-                    onChange={(e) => setEnforcedTier(e.target.value as any)}
-                    className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 backdrop-blur-md cursor-pointer"
-                  >
-                    {activePersona.allowedTiers.map((t) => (
-                      <option key={t} value={t}>{t.toUpperCase()}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Target Models Multi-Selection Ribbon */}
+              {routingMode === 'target_models' && (
+                <div className="p-3.5 bg-slate-950/80 border border-amber-500/30 rounded-xl space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] font-mono text-amber-300 font-semibold flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Select Target Model Pool ({targetModelIds.length} selected):</span>
+                    </span>
 
-              {routingMode === 'enforce_model' && (
-                <div>
-                  <label className="text-[11px] font-mono text-slate-400 block mb-1">ENFORCE MODEL</label>
-                  <select
-                    id="enforce-model-select"
-                    value={enforcedModelId}
-                    onChange={(e) => setEnforcedModelId(e.target.value)}
-                    className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 backdrop-blur-md cursor-pointer"
-                  >
+                    <div className="flex items-center gap-1.5 text-xs font-mono">
+                      <button
+                        type="button"
+                        onClick={() => setTargetModelIds(models.map(m => m.id))}
+                        className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300 text-[10px] cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTargetModelIds([])}
+                        className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-amber-400 text-[10px] cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400">
+                    {targetModelIds.length === 0
+                      ? "💡 No specific models selected — WhyOr will auto-route across all active models in the catalog."
+                      : targetModelIds.length === 1
+                      ? "🎯 1 target model selected — execution will be locked to this model."
+                      : `⚡ ${targetModelIds.length} target models selected — WhyOr will run cost & quality optimization strictly across your chosen candidate pool.`}
+                  </p>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto pr-1">
                     {models
                       .filter((m) => activePersona.allowedTiers.includes(m.tier))
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.tierLabel})</option>
-                      ))}
-                  </select>
-                </div>
-              )}
-
-              {activePersona.canBYOK && (
-                <div>
-                  <label className="text-[11px] font-mono text-slate-400 block mb-1">CUSTOM BYOK KEY (OPTIONAL)</label>
-                  <input
-                    type="password"
-                    value={byokKey}
-                    onChange={(e) => setByokKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full bg-slate-950/70 border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400 backdrop-blur-md"
-                  />
+                      .map((m) => {
+                        const isSelected = targetModelIds.includes(m.id);
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setTargetModelIds(targetModelIds.filter(id => id !== m.id));
+                              } else {
+                                setTargetModelIds([...targetModelIds, m.id]);
+                              }
+                            }}
+                            className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-mono transition-all flex items-center justify-between gap-1.5 cursor-pointer border ${
+                              isSelected
+                                ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 font-semibold'
+                                : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                            }`}
+                          >
+                            <span className="truncate">{m.name}</span>
+                            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] shrink-0 ${
+                              isSelected ? 'bg-amber-400 text-slate-950 font-bold' : 'border border-slate-700'
+                            }`}>
+                              {isSelected ? '✓' : ''}
+                            </span>
+                          </button>
+                        );
+                      })}
+                  </div>
                 </div>
               )}
             </div>
@@ -1323,6 +1484,8 @@ export const DispatchConsole: React.FC<DispatchConsoleProps> = ({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

@@ -472,3 +472,456 @@ export async function deleteTeamFromFirestore(id: string): Promise<void> {
     throw err;
   }
 }
+
+// ==================== 9. USER 7-DAY TRIAL & SUBSCRIPTION TRACKING ====================
+export interface UserTrialInfo {
+  uid: string;
+  email: string;
+  displayName: string;
+  plan: 'free_trial' | 'pro' | 'enterprise';
+  planType?: string;
+  isPaidPlan?: boolean;
+  signupDate: string;
+  trialStartDate: string;
+  trialEndDate: string;
+  trialStartedAt?: string;
+  trialExpiresAt?: string;
+  trialDaysTotal: number;
+  daysRemaining: number;
+  isTrialActive: boolean;
+  isExpired: boolean;
+  hasConfiguredByok: boolean;
+  isByokConfigured?: boolean;
+  dailyTokensUsed: number;
+  dailyTokenLimit: number;
+  totalTokensProcessed: number;
+  totalDispatches: number;
+  updatedAt: string;
+}
+
+export async function saveUserTrialToFirestore(trial: Partial<UserTrialInfo> & { uid: string; email: string }): Promise<UserTrialInfo> {
+  try {
+    const userDocRef = doc(db, 'user_trials', trial.uid);
+    const existingSnap = await getDoc(userDocRef);
+    
+    let now = new Date();
+    let signupDate = trial.signupDate || trial.trialStartedAt || (existingSnap.exists() ? existingSnap.data().signupDate : now.toISOString());
+    let trialStartDate = trial.trialStartDate || trial.trialStartedAt || (existingSnap.exists() ? existingSnap.data().trialStartDate : now.toISOString());
+    
+    // Calculate trial end (7 days from start)
+    let startDateObj = new Date(trialStartDate);
+    let endDateObj = new Date(startDateObj.getTime() + 7 * 24 * 60 * 60 * 1000);
+    let trialEndDate = trial.trialEndDate || trial.trialExpiresAt || endDateObj.toISOString();
+    
+    let msRemaining = new Date(trialEndDate).getTime() - now.getTime();
+    let daysRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60 * 24)));
+    let isTrialActive = trial.isTrialActive ?? (daysRemaining > 0);
+    let isExpired = daysRemaining <= 0 && (trial.plan === 'free_trial' || !trial.plan);
+
+    const fullData: UserTrialInfo = {
+      uid: trial.uid,
+      email: trial.email,
+      displayName: trial.displayName || trial.email.split('@')[0] || 'User',
+      plan: trial.plan || (trial.isPaidPlan ? 'pro' : (existingSnap.exists() ? existingSnap.data().plan : 'free_trial')),
+      planType: trial.planType || (trial.isPaidPlan ? 'pro' : 'free_trial'),
+      isPaidPlan: trial.isPaidPlan ?? (trial.plan === 'pro' || trial.plan === 'enterprise'),
+      signupDate,
+      trialStartDate,
+      trialEndDate,
+      trialStartedAt: signupDate,
+      trialExpiresAt: trialEndDate,
+      trialDaysTotal: 7,
+      daysRemaining,
+      isTrialActive,
+      isExpired,
+      hasConfiguredByok: trial.hasConfiguredByok ?? trial.isByokConfigured ?? (existingSnap.exists() ? existingSnap.data().hasConfiguredByok : false),
+      isByokConfigured: trial.hasConfiguredByok ?? trial.isByokConfigured ?? (existingSnap.exists() ? existingSnap.data().hasConfiguredByok : false),
+      dailyTokensUsed: trial.dailyTokensUsed ?? (existingSnap.exists() ? existingSnap.data().dailyTokensUsed : 0),
+      dailyTokenLimit: trial.dailyTokenLimit ?? 100000,
+      totalTokensProcessed: trial.totalTokensProcessed ?? (existingSnap.exists() ? existingSnap.data().totalTokensProcessed : 0),
+      totalDispatches: trial.totalDispatches ?? (existingSnap.exists() ? existingSnap.data().totalDispatches : 0),
+      updatedAt: now.toISOString(),
+    };
+
+    await setDoc(userDocRef, fullData, { merge: true });
+    return fullData;
+  } catch (err) {
+    console.error('Error saving user trial to Firestore:', err);
+    throw err;
+  }
+}
+
+export async function getUserTrialFromFirestore(uid: string, email?: string): Promise<UserTrialInfo | null> {
+  try {
+    const userDocRef = doc(db, 'user_trials', uid);
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      const data = snap.data() as UserTrialInfo;
+      const now = new Date();
+      const trialEndDate = data.trialEndDate || data.trialExpiresAt || new Date().toISOString();
+      const msRemaining = new Date(trialEndDate).getTime() - now.getTime();
+      const daysRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60 * 24)));
+      return {
+        ...data,
+        daysRemaining,
+        trialExpiresAt: trialEndDate,
+        trialStartedAt: data.trialStartDate || data.signupDate,
+        isTrialActive: daysRemaining > 0,
+        isExpired: daysRemaining <= 0 && data.plan === 'free_trial',
+        isPaidPlan: data.isPaidPlan || data.plan === 'pro' || data.plan === 'enterprise',
+        isByokConfigured: data.hasConfiguredByok || data.isByokConfigured,
+      };
+    }
+    if (email) {
+      // Auto-initialize 7-day free trial on first retrieval
+      return await saveUserTrialToFirestore({ uid, email });
+    }
+    return null;
+  } catch (err) {
+    console.error('Error loading user trial from Firestore:', err);
+    return null;
+  }
+}
+
+export async function loadAllUserTrialsFromFirestore(): Promise<UserTrialInfo[]> {
+  try {
+    const q = query(collection(db, 'user_trials'), orderBy('signupDate', 'desc'), limit(100));
+    const snap = await getDocs(q);
+    const trials: UserTrialInfo[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as UserTrialInfo;
+      const now = new Date();
+      const trialEndDate = data.trialEndDate || data.trialExpiresAt || new Date().toISOString();
+      const msRemaining = new Date(trialEndDate).getTime() - now.getTime();
+      const daysRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60 * 24)));
+      trials.push({
+        ...data,
+        daysRemaining,
+        trialExpiresAt: trialEndDate,
+        trialStartedAt: data.trialStartDate || data.signupDate,
+        isTrialActive: daysRemaining > 0,
+        isExpired: daysRemaining <= 0 && data.plan === 'free_trial',
+        isPaidPlan: data.isPaidPlan || data.plan === 'pro' || data.plan === 'enterprise',
+        isByokConfigured: data.hasConfiguredByok || data.isByokConfigured,
+      });
+    });
+    return trials;
+  } catch (err) {
+    console.error('Error loading user trials list from Firestore:', err);
+    return [];
+  }
+}
+
+// ==================== 10. CONTACT US INQUIRIES ====================
+export interface ContactInquiry {
+  id: string;
+  name: string;
+  email: string;
+  company?: string;
+  phone?: string;
+  topic: 'enterprise_quote' | 'custom_onprem' | 'sla_security' | 'byok_integration' | 'billing_api' | 'general';
+  message: string;
+  status: 'new' | 'in_review' | 'contacted' | 'resolved' | 'closed';
+  createdAt: string;
+}
+
+export async function saveContactInquiryToFirestore(inquiry: Omit<ContactInquiry, 'id' | 'createdAt' | 'status'>): Promise<ContactInquiry> {
+  try {
+    const id = `inq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const fullInquiry: ContactInquiry = {
+      ...inquiry,
+      id,
+      status: 'new',
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(doc(db, 'contact_inquiries', id), fullInquiry);
+    
+    // Also record an audit log
+    await recordAuditLogToFirestore('CONTACT_INQUIRY_RECEIVED', 'support', inquiry.email, `Inquiry: ${inquiry.topic} from ${inquiry.name}`);
+
+    return fullInquiry;
+  } catch (err) {
+    console.error('Error saving contact inquiry to Firestore:', err);
+    throw err;
+  }
+}
+
+export async function updateContactInquiryStatusInFirestore(id: string, status: ContactInquiry['status']): Promise<void> {
+  try {
+    const docRef = doc(db, 'contact_inquiries', id);
+    await setDoc(docRef, { status, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    console.error('Error updating inquiry status:', err);
+  }
+}
+
+export async function loadContactInquiriesFromFirestore(): Promise<ContactInquiry[]> {
+  try {
+    const q = query(collection(db, 'contact_inquiries'), orderBy('createdAt', 'desc'), limit(50));
+    const snap = await getDocs(q);
+    const inquiries: ContactInquiry[] = [];
+    snap.forEach((d) => inquiries.push(d.data() as ContactInquiry));
+    return inquiries;
+  } catch (err) {
+    console.error('Error loading contact inquiries from Firestore:', err);
+    return [];
+  }
+}
+
+// ==================== 11. ADMIN AI ENGINE KEYS & BUDGET CONFIGURATION ====================
+export interface AdminKeyConfig {
+  id: string;
+  provider: string;
+  providerName: string;
+  providerDisplayName: string;
+  modelFamily: string;
+  envVarName: string;
+  apiKey?: string;
+  keyMasked: string;
+  keyRaw?: string;
+  isActive: boolean;
+  status: 'active' | 'warning' | 'budget_exceeded' | 'day_limit_exceeded' | 'invalid';
+  monthlyBudgetCents: number; // in USD dollars
+  monthlyBudgetLimit: number;
+  currentMonthlySpendUsd: number;
+  currentSpend: number;
+  dailyUsageLimitUsd: number;
+  dailyUsageLimit: number;
+  todaySpendUsd: number;
+  todaySpend: number;
+  isBudgetOver: boolean;
+  isDayUsageOver: boolean;
+  alertEmailSent: boolean;
+  lastUpdated: string;
+  notes?: string;
+}
+
+const DEFAULT_ADMIN_KEYS: AdminKeyConfig[] = [
+  {
+    id: 'key_gemini',
+    provider: 'gemini',
+    providerName: 'Google Gemini Pro / Flash 2.5',
+    providerDisplayName: 'Google Gemini',
+    modelFamily: 'gemini',
+    envVarName: 'GEMINI_API_KEY',
+    apiKey: '',
+    keyMasked: 'AIza••••••••••••••••',
+    isActive: true,
+    status: 'active',
+    monthlyBudgetCents: 500,
+    monthlyBudgetLimit: 500,
+    currentMonthlySpendUsd: 142.30,
+    currentSpend: 142.30,
+    dailyUsageLimitUsd: 50,
+    dailyUsageLimit: 50,
+    todaySpendUsd: 18.20,
+    todaySpend: 18.20,
+    isBudgetOver: false,
+    isDayUsageOver: false,
+    alertEmailSent: false,
+    lastUpdated: new Date().toISOString(),
+  },
+  {
+    id: 'key_claude',
+    provider: 'anthropic',
+    providerName: 'Anthropic Claude 3.7 Sonnet',
+    providerDisplayName: 'Anthropic Claude',
+    modelFamily: 'claude',
+    envVarName: 'ANTHROPIC_API_KEY',
+    apiKey: '',
+    keyMasked: 'sk-ant-••••••••••••••••',
+    isActive: true,
+    status: 'active',
+    monthlyBudgetCents: 800,
+    monthlyBudgetLimit: 800,
+    currentMonthlySpendUsd: 285.50,
+    currentSpend: 285.50,
+    dailyUsageLimitUsd: 60,
+    dailyUsageLimit: 60,
+    todaySpendUsd: 34.10,
+    todaySpend: 34.10,
+    isBudgetOver: false,
+    isDayUsageOver: false,
+    alertEmailSent: false,
+    lastUpdated: new Date().toISOString(),
+  },
+  {
+    id: 'key_openai',
+    provider: 'openai',
+    providerName: 'OpenAI GPT-4o & o3-mini',
+    providerDisplayName: 'OpenAI',
+    modelFamily: 'openai',
+    envVarName: 'OPENAI_API_KEY',
+    apiKey: '',
+    keyMasked: 'sk-proj-••••••••••••••••',
+    isActive: true,
+    status: 'active',
+    monthlyBudgetCents: 600,
+    monthlyBudgetLimit: 600,
+    currentMonthlySpendUsd: 190.80,
+    currentSpend: 190.80,
+    dailyUsageLimitUsd: 40,
+    dailyUsageLimit: 40,
+    todaySpendUsd: 12.50,
+    todaySpend: 12.50,
+    isBudgetOver: false,
+    isDayUsageOver: false,
+    alertEmailSent: false,
+    lastUpdated: new Date().toISOString(),
+  },
+  {
+    id: 'key_deepseek',
+    provider: 'deepseek',
+    providerName: 'DeepSeek R1 & V3',
+    providerDisplayName: 'DeepSeek',
+    modelFamily: 'deepseek',
+    envVarName: 'DEEPSEEK_API_KEY',
+    apiKey: '',
+    keyMasked: 'sk-••••••••••••••••',
+    isActive: true,
+    status: 'active',
+    monthlyBudgetCents: 300,
+    monthlyBudgetLimit: 300,
+    currentMonthlySpendUsd: 45.20,
+    currentSpend: 45.20,
+    dailyUsageLimitUsd: 25,
+    dailyUsageLimit: 25,
+    todaySpendUsd: 6.40,
+    todaySpend: 6.40,
+    isBudgetOver: false,
+    isDayUsageOver: false,
+    alertEmailSent: false,
+    lastUpdated: new Date().toISOString(),
+  },
+  {
+    id: 'key_groq',
+    provider: 'groq',
+    providerName: 'Groq Llama-3.3 70B (LPUs)',
+    providerDisplayName: 'Groq',
+    modelFamily: 'groq',
+    envVarName: 'GROQ_API_KEY',
+    apiKey: '',
+    keyMasked: 'gsk_••••••••••••••••',
+    isActive: true,
+    status: 'active',
+    monthlyBudgetCents: 200,
+    monthlyBudgetLimit: 200,
+    currentMonthlySpendUsd: 18.90,
+    currentSpend: 18.90,
+    dailyUsageLimitUsd: 20,
+    dailyUsageLimit: 20,
+    todaySpendUsd: 3.20,
+    todaySpend: 3.20,
+    isBudgetOver: false,
+    isDayUsageOver: false,
+    alertEmailSent: false,
+    lastUpdated: new Date().toISOString(),
+  },
+  {
+    id: 'key_mistral',
+    provider: 'mistral',
+    providerName: 'Mistral Large 2',
+    providerDisplayName: 'Mistral',
+    modelFamily: 'mistral',
+    envVarName: 'MISTRAL_API_KEY',
+    apiKey: '',
+    keyMasked: 'mistral_••••••••••••••••',
+    isActive: true,
+    status: 'active',
+    monthlyBudgetCents: 250,
+    monthlyBudgetLimit: 250,
+    currentMonthlySpendUsd: 28.40,
+    currentSpend: 28.40,
+    dailyUsageLimitUsd: 20,
+    dailyUsageLimit: 20,
+    todaySpendUsd: 4.10,
+    todaySpend: 4.10,
+    isBudgetOver: false,
+    isDayUsageOver: false,
+    alertEmailSent: false,
+    lastUpdated: new Date().toISOString(),
+  }
+];
+
+export async function saveAdminKeyConfigToFirestore(config: AdminKeyConfig): Promise<void> {
+  try {
+    const docRef = doc(db, 'admin_ai_keys', config.id);
+    
+    const monthlyLimit = config.monthlyBudgetLimit ?? config.monthlyBudgetCents ?? 500;
+    const currentSpend = config.currentSpend ?? config.currentMonthlySpendUsd ?? 0;
+    const dailyLimit = config.dailyUsageLimit ?? config.dailyUsageLimitUsd ?? 50;
+    const todaySpend = config.todaySpend ?? config.todaySpendUsd ?? 0;
+
+    // Recompute budget and day usage flags
+    const isBudgetOver = monthlyLimit > 0 && currentSpend >= monthlyLimit;
+    const isDayUsageOver = dailyLimit > 0 && todaySpend >= dailyLimit;
+    let status = config.status;
+    if (isBudgetOver) status = 'budget_exceeded';
+    else if (isDayUsageOver) status = 'day_limit_exceeded';
+    else if (config.isActive) status = 'active';
+
+    const payload: AdminKeyConfig = {
+      ...config,
+      monthlyBudgetCents: monthlyLimit,
+      monthlyBudgetLimit: monthlyLimit,
+      currentMonthlySpendUsd: currentSpend,
+      currentSpend: currentSpend,
+      dailyUsageLimitUsd: dailyLimit,
+      dailyUsageLimit: dailyLimit,
+      todaySpendUsd: todaySpend,
+      todaySpend: todaySpend,
+      isBudgetOver,
+      isDayUsageOver,
+      status,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    await setDoc(docRef, payload, { merge: true });
+  } catch (err) {
+    console.error(`Error saving admin key config for ${config.id}:`, err);
+    throw err;
+  }
+}
+
+export async function loadAdminKeyConfigsFromFirestore(): Promise<AdminKeyConfig[]> {
+  try {
+    const snap = await getDocs(collection(db, 'admin_ai_keys'));
+    if (snap.empty) {
+      // Seed default configs if none exist
+      for (const def of DEFAULT_ADMIN_KEYS) {
+        await setDoc(doc(db, 'admin_ai_keys', def.id), def);
+      }
+      return DEFAULT_ADMIN_KEYS;
+    }
+    const configs: AdminKeyConfig[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as AdminKeyConfig;
+      const monthlyLimit = data.monthlyBudgetLimit ?? data.monthlyBudgetCents ?? 500;
+      const currentSpend = data.currentSpend ?? data.currentMonthlySpendUsd ?? 0;
+      const dailyLimit = data.dailyUsageLimit ?? data.dailyUsageLimitUsd ?? 50;
+      const todaySpend = data.todaySpend ?? data.todaySpendUsd ?? 0;
+
+      const isBudgetOver = monthlyLimit > 0 && currentSpend >= monthlyLimit;
+      const isDayUsageOver = dailyLimit > 0 && todaySpend >= dailyLimit;
+      configs.push({
+        ...data,
+        providerName: data.providerName || data.providerDisplayName || data.provider,
+        modelFamily: data.modelFamily || data.provider,
+        monthlyBudgetLimit: monthlyLimit,
+        monthlyBudgetCents: monthlyLimit,
+        currentSpend: currentSpend,
+        currentMonthlySpendUsd: currentSpend,
+        dailyUsageLimit: dailyLimit,
+        dailyUsageLimitUsd: dailyLimit,
+        todaySpend: todaySpend,
+        todaySpendUsd: todaySpend,
+        isBudgetOver,
+        isDayUsageOver,
+      });
+    });
+    return configs;
+  } catch (err) {
+    console.error('Error loading admin key configs from Firestore:', err);
+    return DEFAULT_ADMIN_KEYS;
+  }
+}

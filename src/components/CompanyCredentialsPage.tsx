@@ -42,6 +42,7 @@ import {
 import { AIProvider, CompanyProviderCredential, CompanyOnboardingProfile, UnifiedSubscriptionGatewayConfig } from '../types';
 import { ClaudeCliTerminal } from './ClaudeCliTerminal';
 import { SubscriptionOAuthModal } from './SubscriptionOAuthModal';
+import ProviderConnectPanel from './ProviderConnectPanel';
 
 interface ProviderConfigMeta {
   id: AIProvider;
@@ -183,7 +184,7 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
   const [credentials, setCredentials] = useState<Record<string, CompanyProviderCredential>>({});
   const [gatewayConfig, setGatewayConfig] = useState<UnifiedSubscriptionGatewayConfig | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<'matrix' | 'unified_gateway' | 'claude_cli' | 'direct_sandbox' | 'settings'>('matrix');
+  const [activeTab, setActiveTab] = useState<'matrix' | 'connect_flows' | 'unified_gateway' | 'claude_cli' | 'direct_sandbox' | 'settings'>('matrix');
   
   // Expanded provider cards state
   const [expandedProvider, setExpandedProvider] = useState<AIProvider | null>('anthropic');
@@ -524,6 +525,21 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('connect_flows')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
+              activeTab === 'connect_flows'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 font-bold shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Local Proxy & Subscription Connect</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-orange-950 text-orange-400 border border-orange-800">
+              Interactive
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('unified_gateway')}
             className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all ${
               activeTab === 'unified_gateway'
@@ -561,6 +577,24 @@ export const CompanyCredentialsPage: React.FC<CompanyCredentialsPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* TAB 0: Interactive Provider & Local Proxy Connect Flows */}
+      {activeTab === 'connect_flows' && (
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl">
+            <div className="border-b border-slate-800 pb-4">
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-400" />
+                Interactive Provider & Local Proxy Connection Hub
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Configure direct provider API keys and local reverse proxy adapters (OpenAI, Anthropic, Google, DeepSeek, Mistral, xAI, Groq).
+              </p>
+            </div>
+            <ProviderConnectPanel />
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: Unified Subscription Gateway Portal */}
       {activeTab === 'unified_gateway' && (

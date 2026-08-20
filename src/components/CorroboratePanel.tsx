@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { authedFetch } from "../lib/firebaseClient";
+import { GitCompare, Sparkles, AlertTriangle, CheckCircle2, Cpu, ArrowRight, RefreshCw, Layers } from "lucide-react";
 
 interface FactComparison {
   status: "agree" | "contradict" | "unique_to_a" | "unique_to_b";
@@ -22,8 +23,6 @@ interface CorroborationResult {
   recommendation: string;
 }
 
-const IMPACT_COLOR = { high: "#FF8A3D", medium: "#93999F", low: "#5B6169" };
-
 export default function CorroboratePanel({
   prompt: initialPrompt,
   modelA,
@@ -33,7 +32,9 @@ export default function CorroboratePanel({
   modelA: { provider: string; modelId: string; label: string };
   modelB: { provider: string; modelId: string; label: string };
 }) {
-  const [prompt, setPrompt] = useState(initialPrompt || "");
+  const [prompt, setPrompt] = useState(
+    initialPrompt || "What are the key legal compliance requirements for AI data residency in the EU under the EU AI Act 2026?"
+  );
   const [result, setResult] = useState<CorroborationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,88 +51,165 @@ export default function CorroboratePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Corroboration failed");
+        setError(data.error || "Cross-model corroboration failed. Please check provider connection.");
       } else {
         setResult(data);
       }
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || "Failed to execute cross-model corroboration.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="border border-[#2A2F38] rounded bg-[#171B21] p-5">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl shadow-xl space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
-          <h3 className="text-sm font-semibold">WhyOr Corroborate</h3>
-          <p className="text-[11px] text-[#93999F] mt-0.5">
-            Runs this prompt through both {modelA.label} and {modelB.label} and compares the facts each one states.
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold uppercase tracking-wider">
+              Fact Verification
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-orange-500/10 text-orange-400 border border-orange-500/20">
+              Dual-Engine Synthesis
+            </span>
+          </div>
+          <h2 className="text-lg sm:text-xl font-bold font-display text-slate-100 mt-2 flex items-center gap-2">
+            <GitCompare className="w-5 h-5 text-orange-400" />
+            WhyOr Corroborate — Cross-Model Fact Checking
+          </h2>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Simultaneously dispatches the prompt through <span className="text-orange-300 font-semibold">{modelA.label}</span> and{" "}
+            <span className="text-cyan-300 font-semibold">{modelB.label}</span>, extracting factual claims and surfacing contradictions.
           </p>
         </div>
+
         <button
           onClick={runCheck}
           disabled={loading || !prompt.trim()}
-          className="px-4 py-2 bg-[#FF8A3D] text-[#171208] rounded text-xs font-medium disabled:opacity-40 shrink-0 hover:bg-[#ffa15e] cursor-pointer"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-orange-500/20 disabled:opacity-40 transition-all cursor-pointer shrink-0"
         >
-          {loading ? "Comparing…" : "Run corroboration"}
+          {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          <span>{loading ? "Corroborating Facts…" : "Run Corroboration"}</span>
         </button>
       </div>
 
-      <textarea
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        placeholder="Enter question or statement to verify across both models..."
-        rows={3}
-        className="w-full bg-[#1D222A] border border-[#2A2F38] rounded p-2.5 text-sm resize-none mb-3"
-      />
+      {/* Prompt Input */}
+      <div className="space-y-2">
+        <label className="block text-xs font-mono text-slate-400">
+          Target Question or Claim to Corroborate:
+        </label>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Enter statement or technical question to cross-verify across frontier AI models..."
+          rows={3}
+          className="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-600 resize-none focus:outline-none focus:border-orange-500/50 leading-relaxed"
+        />
+      </div>
 
-      {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+      {/* Error Message if any */}
+      {error && (
+        <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+          <span>{error}</span>
+        </div>
+      )}
 
+      {/* Results Dashboard */}
       {result && (
-        <div className="mt-4">
-          <div className="flex items-center gap-6 mb-4">
-            <div>
-              <div className="font-mono text-2xl">
-                {result.comparison?.agreementScore !== null && result.comparison?.agreementScore !== undefined ? `${result.comparison.agreementScore}%` : "—"}
+        <div className="space-y-6 animate-in fade-in">
+          {/* Metrics summary cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl">
+              <span className="text-[10px] font-mono uppercase text-slate-500 font-bold">Agreement Score</span>
+              <div className="text-2xl font-bold font-mono text-slate-100 mt-1 flex items-baseline gap-1">
+                {result.comparison?.agreementScore !== null && result.comparison?.agreementScore !== undefined
+                  ? `${result.comparison.agreementScore}%`
+                  : "N/A"}
+                <span className="text-[10px] font-normal text-slate-400">congruence</span>
               </div>
-              <div className="text-[10px] text-[#93999F]">cross-model agreement score</div>
             </div>
-            <div>
-              <div className="font-mono text-2xl" style={{ color: (result.comparison?.highImpactContradictionCount || 0) > 0 ? "#FF8A3D" : "#4FD1C5" }}>
-                {result.comparison?.highImpactContradictionCount || 0}
+
+            <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl">
+              <span className="text-[10px] font-mono uppercase text-slate-500 font-bold">Contradictions</span>
+              <div className="text-2xl font-bold font-mono mt-1 flex items-baseline gap-1">
+                <span className={(result.comparison?.highImpactContradictionCount || 0) > 0 ? "text-orange-400" : "text-emerald-400"}>
+                  {result.comparison?.highImpactContradictionCount || 0}
+                </span>
+                <span className="text-[10px] font-normal text-slate-400">high-impact</span>
               </div>
-              <div className="text-[10px] text-[#93999F]">high-impact contradiction(s)</div>
             </div>
-            <div>
-              <div className="font-mono text-2xl">${(result.totalCostUsd || 0).toFixed(4)}</div>
-              <div className="text-[10px] text-[#93999F]">total cost (both models)</div>
+
+            <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl">
+              <span className="text-[10px] font-mono uppercase text-slate-500 font-bold">Total Execution Cost</span>
+              <div className="text-2xl font-bold font-mono text-cyan-400 mt-1 flex items-baseline gap-1">
+                ${(result.totalCostUsd || 0).toFixed(4)}
+                <span className="text-[10px] font-normal text-slate-400">USD (both runs)</span>
+              </div>
             </div>
           </div>
 
-          <p className="text-xs text-[#E7E9EC] bg-[#1D222A] rounded p-3 mb-4">{result.recommendation}</p>
-
-          {result.comparison?.contradictions?.length > 0 && (
-            <div className="mb-4">
-              <p className="text-[11px] font-mono text-[#93999F] mb-2">CONTRADICTIONS</p>
-              {result.comparison.contradictions.map((c, i) => (
-                <div key={i} className="text-xs py-1.5 border-t border-[#2A2F38] first:border-t-0">
-                  <span className="font-mono text-[10px] mr-2" style={{ color: IMPACT_COLOR[c.impact] || "#93999F" }}>[{c.impact}]</span>
-                  {c.note}
-                </div>
-              ))}
+          {/* Synthesis Recommendation */}
+          {result.recommendation && (
+            <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-orange-400 font-mono">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Synthesis & Grounded Verdict:</span>
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed pl-5">
+                {result.recommendation}
+              </p>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-[#1D222A] p-3 rounded border border-[#2A2F38]">
-              <p className="text-[11px] font-mono text-[#93999F] mb-1.5">{modelA.label}</p>
-              <p className="text-xs text-[#E7E9EC] whitespace-pre-wrap">{result.responseA?.text}</p>
+          {/* Contradictions List */}
+          {result.comparison?.contradictions?.length > 0 && (
+            <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+              <p className="text-xs font-bold font-mono text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Detected Fact Discrepancies ({result.comparison.contradictions.length})
+              </p>
+              <div className="space-y-1.5">
+                {result.comparison.contradictions.map((c, i) => (
+                  <div key={i} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800/80 text-xs text-slate-300 flex items-start gap-2">
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase shrink-0 ${
+                      c.impact === "high" ? "bg-red-500/20 text-red-300 border border-red-500/30" : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    }`}>
+                      {c.impact}
+                    </span>
+                    <span>{c.note}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="bg-[#1D222A] p-3 rounded border border-[#2A2F38]">
-              <p className="text-[11px] font-mono text-[#93999F] mb-1.5">{modelB.label}</p>
-              <p className="text-xs text-[#E7E9EC] whitespace-pre-wrap">{result.responseB?.text}</p>
+          )}
+
+          {/* Model Responses Side-by-Side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs font-mono">
+                <span className="text-orange-400 font-bold flex items-center gap-1">
+                  <Cpu className="w-3.5 h-3.5" /> {modelA.label}
+                </span>
+                <span className="text-slate-500 text-[10px]">${(result.responseA?.costUsd || 0).toFixed(4)}</span>
+              </div>
+              <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
+                {result.responseA?.text}
+              </p>
+            </div>
+
+            <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs font-mono">
+                <span className="text-cyan-400 font-bold flex items-center gap-1">
+                  <Cpu className="w-3.5 h-3.5" /> {modelB.label}
+                </span>
+                <span className="text-slate-500 text-[10px]">${(result.responseB?.costUsd || 0).toFixed(4)}</span>
+              </div>
+              <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
+                {result.responseB?.text}
+              </p>
             </div>
           </div>
         </div>

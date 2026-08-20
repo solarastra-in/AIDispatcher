@@ -50,6 +50,12 @@ import {
 import { User } from 'firebase/auth';
 import { CompanyTeamOnboarding } from './CompanyTeamOnboarding';
 import { EmailTemplateEditor } from './EmailTemplateEditor';
+import SelfHostAnalysisPanel from './SelfHostAnalysisPanel';
+import { AdminAnalyticsDashboard } from './admin/AdminAnalyticsDashboard';
+import { AdminKeysAndBudgetsPortal } from './admin/AdminKeysAndBudgetsPortal';
+import { AdminSubscriptionsTrialsPortal } from './admin/AdminSubscriptionsTrialsPortal';
+import { AdminContactInquiriesPortal } from './admin/AdminContactInquiriesPortal';
+import { BarChart3, KeyRound } from 'lucide-react';
 
 interface AdminConsoleProps {
   onNavigateTab: (tab: string) => void;
@@ -62,7 +68,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
   persistenceMode,
   onTogglePersistenceMode,
 }) => {
-  const [activeTab, setActiveTab] = useState<'smtp' | 'templates' | 'onboarding' | 'auth' | 'firestore' | 'context_policy' | 'audit'>('smtp');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'ai_keys' | 'subscriptions' | 'inquiries' | 'smtp' | 'templates' | 'onboarding' | 'auth' | 'firestore' | 'context_policy' | 'self_host' | 'audit'>('analytics');
   
   // Firebase Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -665,6 +671,54 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
       {/* Tabs Navigation */}
       <div className="flex items-center gap-2 border-b border-white/10 pb-2 overflow-x-auto">
         <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            activeTab === 'analytics'
+              ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 font-bold shadow-md shadow-orange-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>Dashboard Analytics</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ai_keys')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            activeTab === 'ai_keys'
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+          }`}
+        >
+          <KeyRound className="w-4 h-4" />
+          <span>AI Engine Keys & Budgets</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('subscriptions')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            activeTab === 'subscriptions'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>Subscriptions & 7-Day Trials</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('inquiries')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            activeTab === 'inquiries'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+          }`}
+        >
+          <Mail className="w-4 h-4" />
+          <span>Contact Us Inquiries</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('smtp')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
             activeTab === 'smtp'
@@ -746,6 +800,21 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('self_host')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            activeTab === 'self_host'
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-bold shadow-md shadow-orange-500/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+          }`}
+        >
+          <Cpu className="w-4 h-4 text-amber-400" />
+          <span>Self-Host Viability (GPU ROI)</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-400/30 uppercase">
+            ROI Analytics
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('audit')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
             activeTab === 'audit'
@@ -784,6 +853,26 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
             Dismiss
           </button>
         </div>
+      )}
+
+      {/* ==================== TAB: ANALYTICS DASHBOARD ==================== */}
+      {activeTab === 'analytics' && (
+        <AdminAnalyticsDashboard onNavigateTab={setActiveTab} />
+      )}
+
+      {/* ==================== TAB: AI KEYS & BUDGETS PORTAL ==================== */}
+      {activeTab === 'ai_keys' && (
+        <AdminKeysAndBudgetsPortal onNotifyStatus={(msg) => setStatusMessage(msg)} />
+      )}
+
+      {/* ==================== TAB: SUBSCRIPTIONS & 7-DAY TRIALS ==================== */}
+      {activeTab === 'subscriptions' && (
+        <AdminSubscriptionsTrialsPortal onNotifyStatus={(msg) => setStatusMessage(msg)} />
+      )}
+
+      {/* ==================== TAB: CONTACT US INQUIRIES ==================== */}
+      {activeTab === 'inquiries' && (
+        <AdminContactInquiriesPortal onNotifyStatus={(msg) => setStatusMessage(msg)} />
       )}
 
       {/* ==================== TAB 1: SMTP EMAIL SETTINGS ==================== */}
@@ -1564,7 +1653,14 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({
         </div>
       )}
 
-      {/* ==================== TAB 5: AUDIT LOGS ==================== */}
+      {/* ==================== TAB 5: SELF-HOST VIABILITY & GPU ROI ==================== */}
+      {activeTab === 'self_host' && (
+        <div className="space-y-6">
+          <SelfHostAnalysisPanel companyId="company_default" />
+        </div>
+      )}
+
+      {/* ==================== TAB 6: AUDIT LOGS ==================== */}
       {activeTab === 'audit' && (
         <div className="space-y-6">
           <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-4">

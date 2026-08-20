@@ -12,7 +12,11 @@ import { SavingsAnalyticsDashboard } from './components/SavingsAnalyticsDashboar
 import { CompanyCredentialsPage } from './components/CompanyCredentialsPage';
 import { ApiExplorerModal } from './components/ApiExplorerModal';
 import { QualityModelInspector } from './components/QualityModelInspector';
+import { TrialProgressBarHeader } from './components/TrialProgressBarHeader';
 import Workspace from './pages/Workspace';
+import Home from './pages/Home';
+import { PricingPage } from './pages/PricingPage';
+import { ContactPage } from './pages/ContactPage';
 import { AIModel, UserPersona, ContextLedgerEntry } from './types';
 import { INITIAL_AI_MODELS, PERSONA_PROFILES } from './data/mockData';
 import { apiService } from './core/apiSurface';
@@ -22,10 +26,10 @@ import {
   saveContextSessionToFirestore,
   recordAuditLogToFirestore
 } from './lib/firebase';
-import { Globe, ArrowRight, ShieldCheck, Sparkles, Zap, Layers, Code2, Activity } from 'lucide-react';
+import { Globe, ArrowRight, ShieldCheck, Sparkles, Zap, Layers, Code2, Activity, Mail } from 'lucide-react';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<string>('dispatch');
+  const [currentTab, setCurrentTab] = useState<string>('home');
   // Default to Superadmin persona so all governance, models, and admin actions are accessible immediately
   const [activePersona, setActivePersona] = useState<UserPersona>(PERSONA_PROFILES[4] || PERSONA_PROFILES[0]);
   const [models, setModels] = useState<AIModel[]>(INITIAL_AI_MODELS);
@@ -37,61 +41,8 @@ export default function App() {
   // Context Persistence Policy (Firestore Cloud by default vs Local Transient)
   const [persistenceMode, setPersistenceMode] = useState<'firestore_cloud' | 'local_transient'>('firestore_cloud');
 
-  // Initial context ledger entries for demonstration
-  const [ledger, setLedger] = useState<ContextLedgerEntry[]>([
-    {
-      id: 'cxl_init_01',
-      sessionId: 'session_4471',
-      sequenceNumber: 1,
-      timestamp: '2026-08-14T22:30:00Z',
-      previousHash: '0000000000000000000000000000000000000000000000000000000000000000',
-      hash: 'a9f4c3b88d72e61a49c951fa0bb3d1591f86b40280f29bc97686520f95e54d31',
-      promptSnippet: 'Extract commercial lease terms from agreement PDF',
-      routedModelId: 'gemini-3.7-flash',
-      routedModelName: 'Gemini 3.7 Flash',
-      entitiesExtracted: {
-        tenant: 'Apex Logistics Ltd.',
-        premises: 'Suite 402, 100 Innovation Way, Austin TX',
-        monthly_rent: 14250,
-        commencement: '2026-10-01',
-        annual_escalation_pct: 3.5,
-      },
-      decisionsMade: [
-        'Classified as simple_extraction (Score 2.0/10)',
-        'Routed to low-cost Gemini 3.7 Flash',
-        'Saved 1,420 tokens vs Frontier baseline ($0.0068 saved)',
-      ],
-      tokensProcessed: 320,
-      tokensSaved: 1420,
-      verified: true,
-    },
-    {
-      id: 'cxl_init_02',
-      sessionId: 'session_4471',
-      sequenceNumber: 2,
-      timestamp: '2026-08-14T22:31:15Z',
-      previousHash: 'a9f4c3b88d72e61a49c951fa0bb3d1591f86b40280f29bc97686520f95e54d31',
-      hash: '7b22d109865c69ee312d8a57199c089c8942b083c27181c015b6727289b4ee01',
-      promptSnippet: 'Evaluate hail-claim membrane puncture risk and anchor lease conflict',
-      routedModelId: 'gemini-3.1-pro-preview',
-      routedModelName: 'Gemini 3.1 Pro',
-      entitiesExtracted: {
-        property: 'Shops at Turkey Creek',
-        anchor_tenant: 'Whole Foods',
-        carrier_offer: 180000,
-        engineering_estimate: 840000,
-        risk_status: 'anchor_abatement_open',
-      },
-      decisionsMade: [
-        'Classified as deep_synthesis (Score 7.5/10)',
-        'Inherited structured lease facts from Block #1 without transcript replay',
-        'Escalated to Frontier tier for multi-domain hazard audit',
-      ],
-      tokensProcessed: 1140,
-      tokensSaved: 2800,
-      verified: true,
-    },
-  ]);
+  // Context Ledger state (persisted in Firestore & populated via live dispatches)
+  const [ledger, setLedger] = useState<ContextLedgerEntry[]>([]);
 
   // Hydrate ledger from Firestore if available
   useEffect(() => {
@@ -186,6 +137,12 @@ export default function App() {
       {/* Main Content Area */}
       <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         
+        {/* 7-Day Free Trial Visual Progress Bar & Pro Upgrade Bar */}
+        <TrialProgressBarHeader 
+          onNavigateTab={setCurrentTab}
+          activePersonaEmail={activePersona.email}
+        />
+
         {/* Collapsible Quality Model & Thompson Sampling Inspector */}
         {isQualityInspectorOpen && (
           <div className="animate-in fade-in zoom-in-95 duration-200">
@@ -239,12 +196,6 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'workspace' && (
-          <div className="h-[calc(100vh-4rem)]">
-            <Workspace />
-          </div>
-        )}
-
         {currentTab === 'credentials' && (
           <CompanyCredentialsPage
             onNavigateToDispatch={(p, m) => {
@@ -258,6 +209,7 @@ export default function App() {
         {currentTab === 'analytics' && (
           <SavingsAnalyticsDashboard
             activePersona={activePersona}
+            ledger={ledger}
             onNavigateTab={setCurrentTab}
             onPrefillPrompt={(p) => {
               setPrefilledPrompt(p);
@@ -310,6 +262,29 @@ export default function App() {
             onNavigateTab={setCurrentTab}
           />
         )}
+
+        {currentTab === 'pricing' && (
+          <PricingPage
+            onNavigateTab={setCurrentTab}
+          />
+        )}
+
+        {currentTab === 'contact' && (
+          <ContactPage
+            onNavigateTab={setCurrentTab}
+          />
+        )}
+
+        {currentTab === 'home' && (
+          <Home 
+            onNavigateTab={setCurrentTab}
+            onPrefillPrompt={(prompt, modelId) => {
+              setPrefilledPrompt(prompt);
+              if (modelId) setPrefilledModelId(modelId);
+              setCurrentTab('dispatch');
+            }}
+          />
+        )}
       </main>
 
       {/* Modern Frosted Glass Footer with clickable navigation */}
@@ -326,6 +301,15 @@ export default function App() {
             {/* Quick Navigation Links */}
             <div className="flex flex-wrap items-center gap-2">
               <button
+                id="footer-nav-home"
+                onClick={() => setCurrentTab('home')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  currentTab === 'home' ? 'bg-orange-500/20 text-orange-300 font-bold border border-orange-400/30' : 'hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Overview
+              </button>
+              <button
                 id="footer-nav-dispatch"
                 onClick={() => setCurrentTab('dispatch')}
                 className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
@@ -333,6 +317,24 @@ export default function App() {
                 }`}
               >
                 Dispatch Console
+              </button>
+              <button
+                id="footer-nav-pricing"
+                onClick={() => setCurrentTab('pricing')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  currentTab === 'pricing' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-400/30' : 'hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Pricing & Trial
+              </button>
+              <button
+                id="footer-nav-credentials"
+                onClick={() => setCurrentTab('credentials')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  currentTab === 'credentials' ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-400/30' : 'hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Company BYOK
               </button>
               <button
                 id="footer-nav-analytics"
@@ -344,15 +346,6 @@ export default function App() {
                 Savings & Trends
               </button>
               <button
-                id="footer-nav-catalog"
-                onClick={() => setCurrentTab('catalog')}
-                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                  currentTab === 'catalog' ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-400/30' : 'hover:text-white hover:bg-white/5'
-                }`}
-              >
-                Models & Tools
-              </button>
-              <button
                 id="footer-nav-ledger"
                 onClick={() => setCurrentTab('ledger')}
                 className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
@@ -362,6 +355,15 @@ export default function App() {
                 Context Ledger
               </button>
               <button
+                id="footer-nav-catalog"
+                onClick={() => setCurrentTab('catalog')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  currentTab === 'catalog' ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-400/30' : 'hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Models & Tools
+              </button>
+              <button
                 id="footer-nav-teams"
                 onClick={() => setCurrentTab('teams')}
                 className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
@@ -369,6 +371,15 @@ export default function App() {
                 }`}
               >
                 Team & Governance
+              </button>
+              <button
+                id="footer-nav-contact"
+                onClick={() => setCurrentTab('contact')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                  currentTab === 'contact' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/30' : 'hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Contact Us
               </button>
               <button
                 id="footer-nav-admin"

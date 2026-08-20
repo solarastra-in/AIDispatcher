@@ -156,6 +156,63 @@
         "updatedAt": { "type": "string", "description": "Last updated timestamp" },
         "updatedBy": { "type": "string", "description": "SuperAdmin email who updated the template" }
       }
+    },
+    "UserTrial": {
+      "collection": "user_trials",
+      "fields": {
+        "uid": { "type": "string", "description": "User UID or Auth identifier" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "plan": { "type": "string", "description": "free_trial, pro, enterprise" },
+        "planType": { "type": "string", "description": "Plan type" },
+        "isPaidPlan": { "type": "boolean", "description": "Whether user is on a paid plan" },
+        "signupDate": { "type": "string", "description": "Signup ISO date" },
+        "trialStartDate": { "type": "string", "description": "Trial start ISO date" },
+        "trialEndDate": { "type": "string", "description": "Trial end ISO date" },
+        "trialDaysTotal": { "type": "number", "description": "7 days allocation" },
+        "daysRemaining": { "type": "number", "description": "Days remaining on trial" },
+        "isTrialActive": { "type": "boolean", "description": "Whether trial is currently valid" },
+        "isExpired": { "type": "boolean", "description": "Whether trial has expired" },
+        "hasConfiguredByok": { "type": "boolean", "description": "Whether user configured their own keys" },
+        "dailyTokensUsed": { "type": "number", "description": "Tokens consumed today" },
+        "dailyTokenLimit": { "type": "number", "description": "Daily token quota" },
+        "totalTokensProcessed": { "type": "number", "description": "Cumulative tokens" },
+        "totalDispatches": { "type": "number", "description": "Count of task dispatches" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" }
+      }
+    },
+    "AdminKeyConfig": {
+      "collection": "admin_ai_keys",
+      "fields": {
+        "id": { "type": "string", "description": "Unique key identifier" },
+        "provider": { "type": "string", "description": "gemini, anthropic, openai, deepseek, groq, mistral" },
+        "providerDisplayName": { "type": "string", "description": "Human readable provider label" },
+        "keyMasked": { "type": "string", "description": "Masked representation of API key" },
+        "isActive": { "type": "boolean", "description": "Whether key is currently active" },
+        "status": { "type": "string", "description": "active, budget_exceeded, day_limit_exceeded, disabled" },
+        "monthlyBudgetCents": { "type": "number", "description": "Monthly budget in USD" },
+        "currentMonthlySpendUsd": { "type": "number", "description": "Current month spend in USD" },
+        "dailyUsageLimitUsd": { "type": "number", "description": "Daily max spend in USD" },
+        "todaySpendUsd": { "type": "number", "description": "Today spend in USD" },
+        "isBudgetOver": { "type": "boolean", "description": "Whether monthly budget is exceeded" },
+        "isDayUsageOver": { "type": "boolean", "description": "Whether daily usage limit is exceeded" },
+        "alertEmailSent": { "type": "boolean", "description": "Whether email alert was dispatched" },
+        "lastUpdated": { "type": "string", "description": "Last modified timestamp" }
+      }
+    },
+    "ContactInquiry": {
+      "collection": "contact_inquiries",
+      "fields": {
+        "id": { "type": "string", "description": "Inquiry identifier" },
+        "name": { "type": "string", "description": "Sender name" },
+        "email": { "type": "string", "description": "Sender email" },
+        "company": { "type": "string", "description": "Company name" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "topic": { "type": "string", "description": "enterprise_quote, custom_onprem, sla_security, byok_integration, billing_api, general" },
+        "message": { "type": "string", "description": "Inquiry message content" },
+        "status": { "type": "string", "description": "new, in_review, contacted, resolved, closed" },
+        "createdAt": { "type": "string", "description": "Submission ISO timestamp" }
+      }
     }
   }
 }
